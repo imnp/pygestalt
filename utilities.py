@@ -20,6 +20,18 @@ def unsignedIntegerToBytes(integer, numbytes):
     if integer>0: raise IndexError('Overflow in conversion between uint and byte list.')
     else: return bytes
     
+def signedIntegerToTwosComplement(integer, size):
+    """Converts a signed integer into an unsigned two's complement representation.
+    
+    integer -- the number to be converted.
+    size -- the length in bytes of the two's complement number to be returned.
+    """
+    if integer >= 0: return integer #integer is positive, so nothing needs to be done.
+    else:
+        allOnes = 256**size - 1 # fills size bytes with all ones
+        return (allOnes^abs(integer)) + 1  #inverts just the bits comprising the original number, and adds one. This is two's complement!
+    
+ 
 def flattenList(inputList):
     """Flattens shallow nested lists into a single list.
     

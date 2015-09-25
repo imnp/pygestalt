@@ -1,6 +1,7 @@
 # Testing code used during development
 
 from pygestalt import packets
+from pygestalt import utilities
 
 # addressToken = packets.unsignedInt('address',2)
 # myPacket = packets.template('myPacket', addressToken)
@@ -14,9 +15,9 @@ gestaltPacket = packets.template('gestaltPacket', packets.unsignedInt('_startByt
                                         packets.packet('_payload_'),
                                         packets.checksum('_checksum_'))
 
-myPacket = packets.template('myPacket', packets.unsignedInt('xPosition',2),
-                                        packets.unsignedInt('yPosition',2),
-                                        packets.unsignedInt('zPosition',2))
+myPacket = packets.template('myPacket', packets.signedInt('xPosition',2),
+                                        packets.signedInt('yPosition',2),
+                                        packets.signedInt('zPosition',2))
 
 
 myEncodedPacket = myPacket.encode({'xPosition':1023, 'yPosition':1024,'zPosition':1025 })
@@ -30,5 +31,5 @@ print gestaltPacket.encode({'_startByte_':72, '_address_':1024, '_port_':34, '_p
 
 myPackets2 = packets.template('myPacket2', myPacket)
 
-myEncodedPacket2 = myPackets2.encode({'xPosition':1023, 'yPosition':1024,'zPosition':1025 })
-print gestaltPacket.encode({'_startByte_':72, '_address_':1024, '_port_':34, '_payload_': myEncodedPacket})
+myEncodedPacket2 = myPackets2.encode({'xPosition':-1, 'yPosition':-2,'zPosition': -65535 })
+print gestaltPacket.encode({'_startByte_':72, '_address_':1024, '_port_':34, '_payload_': myEncodedPacket2})

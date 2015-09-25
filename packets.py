@@ -248,7 +248,23 @@ class packetTemplate(packetToken):
 
 class signedInt(packetToken):
     """A signed integer token."""
-    pass
+    def init(self, size = 1):
+        """Initializer for signed integer token.
+        
+        size -- the length in bytes of the signed integer. Note that max value is +/- 0.5*size.
+        """
+        self.size = size
+        
+    def _encode_(self, encodeValue, inProcessPacket):
+        """Encodes the provided value into a signed integer fit within the specified number of bytes.
+        
+        encodeValue -- the signed integer to be encoded.
+        """
+        twosComplementRepresentation = utilities.signedIntegerToTwosComplement(encodeValue, self.size)  #note that function handles both pos and neg numbers.
+        return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size) # convert to byte list.
+        
+
+
 
 class fixedPoint(packetToken):
     """A fixed point decimal token."""
