@@ -5,6 +5,7 @@
 #--IMPORTS--
 from pygestalt import utilities
 import itertools
+import math
 
 class serializedPacket(list):
     """The type used for storing serialized packets.
@@ -267,7 +268,25 @@ class signedInt(packetToken):
 
 
 class fixedPoint(packetToken):
-    """A fixed point decimal token."""
-    pass
-
+    """A signed fixed point decimal token."""
+    def init(self, integerBits, fractionalBits):
+        """Initializer for signed fixed point decimal tokens.
+        
+        integerBits -- number of integer bits. X in X.Y
+        fractionalBits -- number of fractionalBits. Y in X.Y.
+        
+        Note that integerBits + fractionalBits will be packed into the smallest possible number of bytes.
+        Ideally integerBits + fractionalBits is divisible by 8.
+        """
+        self.integerBits = integerBits
+        self.fractionalBits = fractionalBits
+        self.size = int(math.ceil((integerBits + fractionalBits)/8.0))   #smallest number of bytes that will contain the fixed-point format.
+    
+    def _encode_(self, encodeValue, inProcessPacket):
+        """Encodes the provided value into a signed fixed-point decimal."""
+        
+        bitShiftedValue = encodeValue * 2**self.fractionalBits   #fixed-point encoding is as simple as left-shifting by the fractional bits.
+        twosComplementRepresentation = utilities.signedIntegerToTwosComplement(int(bitShiftedValue), self.size) # convert to twos complement
+        return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size)    #convert to byte list
+        
 

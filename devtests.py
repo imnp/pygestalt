@@ -19,6 +19,8 @@ myPacket = packets.template('myPacket', packets.signedInt('xPosition',2),
                                         packets.signedInt('yPosition',2),
                                         packets.signedInt('zPosition',2))
 
+myFixedPacket = packets.template('myFixedPacket', packets.fixedPoint('sensorReading', 16,16))
+
 
 myEncodedPacket = myPacket.encode({'xPosition':1023, 'yPosition':1024,'zPosition':1025 })
 print gestaltPacket.encode({'_startByte_':72, '_address_':1024, '_port_':34, '_payload_': myEncodedPacket})
@@ -33,3 +35,5 @@ myPackets2 = packets.template('myPacket2', myPacket)
 
 myEncodedPacket2 = myPackets2.encode({'xPosition':-1, 'yPosition':-2,'zPosition': -65535 })
 print gestaltPacket.encode({'_startByte_':72, '_address_':1024, '_port_':34, '_payload_': myEncodedPacket2})
+
+print myFixedPacket.encode({'sensorReading':-1.999999})
