@@ -46,6 +46,7 @@ class template(object):
             self.template = packetTokens    # the internally stored template is just the list of arguments in the order they were provided. 
 
         self.template = list(self.template)
+        self.size = self.calculateTemplateSize(self.template)
             
     def __call__(self, input):
         """A shortcut to either encode or decode a packet.
@@ -59,6 +60,40 @@ class template(object):
             return self.encode(input)
         if type(input) == list or type(input) == packet:    # Provided input is a list or packet, so user wants to decode into a dictionary
             return self.decode(input)
+    
+    @staticmethod
+    def calculateTemplateSize(template):
+        """Determines the size of a provided template.
+        
+        Size will be returned as either > 1 for a determinate sized packet, 0 for packets of indeterminate size, and -1 for
+        packets with more than one tokens that have indeterminate sizes. This condition should fail the validation function.
+        Note that the word size is used instead of length to distinguish from the length token, which can report size
+        either self-inclusive or not, and does not include any checksums.
+        
+        template -- the template whose size should be calculated.
+        
+        return value:
+            >1 -- size of template in  bytes
+            0 -- template has indeterminate size
+            -1 -- template is invalid, has more than one tokens of indeterminate size 
+        """
+        size = -1   #first pass value
+        for token in template:  # iterate thru all tokens in the template
+            if size == -1: # first pass
+                size = token.size
+            elif size == 0: # template size is indeterminate
+                if token.size == 0: # template contains at least two tokens of indeterminate size.
+                    size = -1 # mark template as invalid
+                    break   # no need to continue
+            else:   #so far, template has a determinate size
+                if token.size == 0: #token has an indeterminate size
+                    size = 0    #template now  has an indeterminate size
+                else:
+                    size += token.size
+        return size
+                
+                
+        
     
     def encode(self, inputDict, *args, **kwargs):
         """Serializes a packet using the token list stored in self.template.
@@ -93,6 +128,8 @@ class packetToken(object):
         """
         self.keyName = keyName  # permanently store keyName
         self.requireEncodeDict = True   #by default, tokens require an encode dictionary in order to encode packets. Exceptions include length and checksum tokens.
+        self.size = 0   # by default, tokens encode to and decode from a list of predetermined size. Exceptions incude pList, pString, and packet tokens.
+                        # size = 0 means it has no predetermined size, which is a fail-safe default for validation.
         self.init(*args)    # call subclass init function to do something with additional arguments.
     
     def init(self, *args):
@@ -113,7 +150,6 @@ class packetToken(object):
             else: errorMessage = str(self.keyName) + " not found in template."
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary
-
 
 
 #---- TOKEN TYPES ----
@@ -163,7 +199,6 @@ class length(packetToken):
             return utilities.unsignedIntegerToBytes(length, self.size)  #convert to integer of lenth self.size
         else: return self   #no in-process packet has been provided.
         
-        
 
 class checksum(packetToken):
     """Performs a checksum operation on the in-process packet."""
@@ -174,6 +209,7 @@ class checksum(packetToken):
         """
         self.CRCInstance = utilities.CRC(polynomial)    # initialize a CRC gen/test class
         self.requireEncodeDict = False  #doesn't need an input from the encode dictionary
+        self.size = 1   #for now only supports single-byte checksums
     
     def _encode_(self, encodeValue, inProcessPacket):
         """Returns the checksum value of the in-process packet.
@@ -187,11 +223,16 @@ class checksum(packetToken):
             return self.CRCInstance.generate(checksumList)  #generate and return checksum
         else: return self
         
+        
 class pList(packetToken):
     """A list-type token.
     
     Note that no length is provided, and whatever list is provided will be passed thru.
     """
+    def init(self):
+        """Initializer for pList token type."""
+        self.size = 0  # length is determined by the run-time input to the encoder or decoder
+    
     def _encode_(self, encodeValue, inProcessPacket):
         """Inserts the list provided in encodeValue into the packet.
         
@@ -199,11 +240,16 @@ class pList(packetToken):
         """
         return encodeValue
 
+
 class pString(packetToken):
     """A string-type token.
     
     Note that no length is provided, and whatever string is provided will be converted to a list and passed thru.
     """
+    def init(self):
+        """Initializer for pString token type."""
+        self.size = 0  # length is determined by the runt-time input to the encoder or decoder
+        
     def _encode_(self, encodeValue, inProcessPacket):
         """Converts string into a list.
         
@@ -211,12 +257,17 @@ class pString(packetToken):
         """
         return utilities.stringToList(encodeValue)
 
+
 class packet(packetToken):
     """An embedded packet.
     
     Note that this is similar to the pList token except that it converts a packet into a list on encode.
     The primary reason for breaking out out is to make embedded packets more explicit in the template definition.
     """
+    def init(self):
+        """Initializer for packet token type."""
+        self.size = 0  # length is determined by the runt-time input to the encoder or decoder
+        
     def _encode_(self, encodeValue, inProcessPacket):
         """Converts sub-packet to list, and insert into packet.
         
@@ -230,20 +281,19 @@ class packetTemplate(packetToken):
     
     The primary use of this token type is to extend a packet definition.
     """
-    
     def init(self, template):
         """Initializes packet template token.
         
         template -- a packets.template instance.
         """
         self.template = template
+        self.size = self.template.size    #inherits fixed size from child template
     
     def _encode_(self, encodeValue, inProcessPacket):
         """Encodes the nested packet template using the provided encoding dictionary.
         
         encodeValue -- contains the encoding dictionary to be encoded by the template.
         """
-        
         return self.template.encode(encodeValue)
 
 
@@ -264,8 +314,6 @@ class signedInt(packetToken):
         twosComplementRepresentation = utilities.signedIntegerToTwosComplement(encodeValue, self.size)  #note that function handles both pos and neg numbers.
         return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size) # convert to byte list.
         
-
-
 
 class fixedPoint(packetToken):
     """A signed fixed point decimal token."""
