@@ -6,6 +6,7 @@
 from pygestalt import utilities
 import itertools
 import math
+import errors
 
 class serializedPacket(list):
     """The type used for storing serialized packets.
@@ -29,7 +30,6 @@ class serializedPacket(list):
         """A shortcut to get the serialized packet in the form of a stripped list."""
         
         
-        
 class template(object):
     """Stores the formatting used to encode and decode serialized data packets."""
     def __init__(self, *packetTokens):
@@ -42,11 +42,26 @@ class template(object):
             self.name = packetTokens[0] # give this template a name!
             self.template = packetTokens[1:] # the internally stored template is just the list of arguments in the order they were provided, minus the name.
         else: 
-            self.name = None  # a nameless template :-(
+            self.name = ""  # a nameless template :-(
             self.template = packetTokens    # the internally stored template is just the list of arguments in the order they were provided. 
 
-        self.template = list(self.template)
+        self.template = list(self.template) #convert from tuple to list
+        for token in self.template: token.parentTemplateName = self.name    # gives each token a reference to this template's name for error output.
         self.size = self.calculateTemplateSize(self.template)
+        self.validate()
+    
+    def validate(self):
+        """Validates that template is properly composed."""
+        
+        errorFlag = False   #used to keep track of whether an error occured
+        
+        #run a series of tests
+        if self.size < 0:   # template has too many indeterminate tokens
+            errorMessage = "Cannot compose template " + self.name +". More than one tokens have indeterminate lengths!"
+            errorFlag = True
+        
+        if errorFlag:
+            raise errors.CompositionError(errorMessage)
             
     def __call__(self, input):
         """A shortcut to either encode or decode a packet.
@@ -93,30 +108,52 @@ class template(object):
         return size
                 
                 
-        
-    
-    def encode(self, inputDict, *args, **kwargs):
+    def encode(self, encodeDict, *args, **kwargs):
         """Serializes a packet using the token list stored in self.template.
         
-        inputDict -- the input dictionary that needs to get encoded using the template.
-        *args and **kwargs -- here to catch unexpected terms because this encode function needs to be interchangeable with a packet
+        encodeDict -- the input dictionary that needs to get encoded using the template.
+        *args and **kwargs -- here to catch un-needed terms because this encode function needs to be interchangeable with a packet
                               token to permit embedding packets.
         """
         
         #1) Encode tokens that don't require information on the in-process packet, i.e. NOT length and checksum tokens 
-        inProcessPacket = [token.encode(inputDict, templateName = self.name) for token in self.template]
+        inProcessPacket = [token.encode(encodeDict) for token in self.template]
         
         #2) Encode length tokens, all others get copied without calling an encode method. At this point most tokens will be lists.
-        inProcessPacket = [token.encode(inputDict, inProcessPacket, self.name) if type(token) == length else token for token in inProcessPacket]
+        inProcessPacket = [token.encode(encodeDict, inProcessPacket) if type(token) == length else token for token in inProcessPacket]
         
         #3) Encode checksum tokens, all others get copied without calling an encode method.
-        inProcessPacket = [token.encode(inputDict, inProcessPacket, self.name) if type(token) == checksum else token for token in inProcessPacket]
+        inProcessPacket = [token.encode(encodeDict, inProcessPacket) if type(token) == checksum else token for token in inProcessPacket]
                     
         return serializedPacket(inProcessPacket, self)  #convert into packet type, giving a reference to the template, and return
     
     
-    def decode(self):
-        pass
+    def decode(self, inputPacket, *args, **kwargs):
+        """Deserializes a packet, using the token list stored in self.template, into a key:value dictionary.
+        
+        inputPacket -- either a list or packets.packet that contains a serial stream of data to be decoded by the template.
+        *args, **kwargs --  here to catch unexpected terms because this decode function needs to be interchangeable with a packet
+                            token to permit embedding packets.
+        
+        The decoding algorithm works by feeding the packet thru a chain of tokens, each of which will strip their component
+        of the packet. It becomes complicated by tokens without a fixed length. This is handled by working forwards until
+        an unbounded token is encountered, then working in reverse thru the remainder of the packets.
+        """
+        workingCopy = list(inputPacket) # converts packets.packet to a list, and establishes a working copy.  
+        decodeDict = {}   # stores the growing dictionary of decoded packet values.
+        reverseDecode = False   # flag to keep track of decode direction. false -- forwards, true -- reverse
+        
+        for tokenForwardIndex, token in enumerate(self.template):   #iterate in the forwards direction through all tokens
+            if token.size > 0:  #token has a fixed size
+                decodeDict.update(token.decode(workingCopy, reverseDecode))    #updated decodeDict with key:value pairs decoded by token
+                continue
+            else:   #token has an indeterminate size
+                for token in reversed(self.template[tokenForwardIndex:]):   #iterate in reverse over remainder of template
+                    reverseDecode = True
+                    pass
+        
+
+
 
 class packetToken(object):
     """Base class for creating packet tokens, which are elements that handle encoding and decoding each segment of a packet."""
@@ -127,6 +164,7 @@ class packetToken(object):
         keyName -- a reference name for the token that will match a key in an encoding dictionary, or be provided as a key during decoding.
         """
         self.keyName = keyName  # permanently store keyName
+        self.parentTemplateName = ""    #used for error output, this gets updated by the parent template upon its instantiation.
         self.requireEncodeDict = True   #by default, tokens require an encode dictionary in order to encode packets. Exceptions include length and checksum tokens.
         self.size = 0   # by default, tokens encode to and decode from a list of predetermined size. Exceptions incude pList, pString, and packet tokens.
                         # size = 0 means it has no predetermined size, which is a fail-safe default for validation.
@@ -136,17 +174,16 @@ class packetToken(object):
         """Secondary initializer should be over-ridden by subclass.""" 
         pass
     
-    def encode(self, encodeDict, inProcessPacket = [], templateName = None):
+    def encode(self, encodeDict, inProcessPacket = []):
         """Serializes the value keyName in encodeDict using the subclass's _encode_ method.
         
         encodeDict -- a dictionary of values to be encoded. Only the value who's key matches keyName will be encoded by the method.
         inProcessPacket -- whatever has already been processed. Only used by post-processing tokens like length and checksums. 
-        templateName -- the name of the calling template, used for debugging.
         """
         if self.keyName in encodeDict:  # keyName has a matching value in the encodeDict, proceed!
             return self._encode_(encodeDict[self.keyName], inProcessPacket) # call the subclass's _encode_ method for token-specific processing.
         elif self.requireEncodeDict: # no keyName has been found and dictionary required, so compose a useful error message and raise an exception.
-            if templateName: errorMessage = str(self.keyName) + " not found in template " + templateName + "."
+            if parentTemplateName: errorMessage = str(self.keyName) + " not found in template " + self.parentTemplateName + "."
             else: errorMessage = str(self.keyName) + " not found in template."
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary

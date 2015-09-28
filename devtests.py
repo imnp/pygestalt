@@ -43,6 +43,5 @@ print myFixedPacket.size
 
 print myPackets2.size
 
-myPackets3 = packets.template('myPacket3', gestaltPacket,
-                                            gestaltPacket)
+myPackets3 = packets.template('myPacket3', gestaltPacket)
 print myPackets3.size
