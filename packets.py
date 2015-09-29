@@ -114,6 +114,8 @@ class template(object):
         encodeDict -- the input dictionary that needs to get encoded using the template.
         *args and **kwargs -- here to catch un-needed terms because this encode function needs to be interchangeable with a packet
                               token to permit embedding packets.
+                              
+        Returns a packets.serializedPacket object.
         """
         
         #1) Encode tokens that don't require information on the in-process packet, i.e. NOT length and checksum tokens 
@@ -128,29 +130,44 @@ class template(object):
         return serializedPacket(inProcessPacket, self)  #convert into packet type, giving a reference to the template, and return
     
     
-    def decode(self, inputPacket, *args, **kwargs):
+    def decode(self, inputPacket, forwardDecode = True):
         """Deserializes a packet, using the token list stored in self.template, into a key:value dictionary.
         
         inputPacket -- either a list or packets.packet that contains a serial stream of data to be decoded by the template.
-        *args, **kwargs --  here to catch unexpected terms because this decode function needs to be interchangeable with a packet
-                            token to permit embedding packets.
+        forwardDecode -- if true, primary decode direction is forwards (left to right). If false, primary decode direction is reverse.
         
         The decoding algorithm works by feeding the packet thru a chain of tokens, each of which will strip their component
-        of the packet. It becomes complicated by tokens without a fixed length. This is handled by working forwards until
-        an unbounded token is encountered, then working in reverse thru the remainder of the packets.
-        """
-        workingCopy = list(inputPacket) # converts packets.packet to a list, and establishes a working copy.  
-        decodeDict = {}   # stores the growing dictionary of decoded packet values.
-        reverseDecode = False   # flag to keep track of decode direction. false -- forwards, true -- reverse
+        of the packet. It becomes complicated by tokens without a fixed length. This is handled by working in one direction until
+        an unbounded token is encountered (the primary pass), then changing direction thru the remainder of the packets.
         
-        for tokenForwardIndex, token in enumerate(self.template):   #iterate in the forwards direction through all tokens
-            if token.size > 0:  #token has a fixed size
-                decodeDict.update(token.decode(workingCopy, reverseDecode))    #updated decodeDict with key:value pairs decoded by token
+        Returns (decodeDict, workingPacket) where:
+        decodeDict -- the set of key:value pairs decoded by the template
+        workingPacket -- whatever packet remains after decoding. If template is not embedded in another template, this should be []
+        """
+        workingPacket = list(inputPacket) # converts packets.packet to a list, and establishes a working copy.
+        if forwardDecode:
+            workingTemplate = self.template
+        else:
+            workingTemplate = [token for token in reversed(self.template)]  #generate a reverse template 
+        decodeDict = {}   # stores the growing dictionary of decoded packet values.
+        
+        # PRIMARY PASS -- iterate over template in primary direction
+        for tokenIndex, token in enumerate(workingTemplate):
+            if token.size > 0:  #token has a fixed size, continue in primary pass
+                decodedKeyValuePairs, workingPacket = token.decode(workingPacket, forwardDecode)
+                decodeDict.update(decodedKeyValuePairs)    #updated decodeDict with key:value pairs decoded by token
                 continue
-            else:   #token has an indeterminate size
-                for token in reversed(self.template[tokenForwardIndex:]):   #iterate in reverse over remainder of template
-                    reverseDecode = True
-                    pass
+            else:
+                tokenIndex -= 1 #roll back the token index so that it's included in the secondary pass 
+                break
+        
+        # SECONDARY PASS -- iterate over remaining template in reverse direction
+        forwardDecode = not(forwardDecode)  #reverse the direction of decoding
+        for token in reversed(workingTemplate[tokenIndex+1:]):    #tokenForwardIndex + 1 is the next token in the template. If no secondary pass, this will iterate over an empty list
+            decodedKeyValuePairs, workingPacket = token.decode(workingPacket, forwardDecode)
+            decodeDict.update(decodedKeyValuePairs)  #update decodeDict with key:value pairs decoded by token
+        
+        return decodeDict, workingPacket
         
 
 
@@ -187,6 +204,20 @@ class packetToken(object):
             else: errorMessage = str(self.keyName) + " not found in template."
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary
+        
+    def decode(self, inputPacket, forwardDecode):
+        """Extracts relevant bytes from a packet and converts into a key:value pair using the sublcass's _decode_ method.
+        
+        inputPacket -- the list of bytes from which to extract the information represented by the token.
+        forwardDecode -- if true, remove bytes from beginning of packet (left side), otherwise remove from the right.
+        
+        Each token will remove a quantity of bytes from the inputPacket and decode into a value. For tokens with fixed
+        size, a fixed number of bytes will be removed. If the size is indeterminate then the entire packet will be consumed.
+        """
+        
+        decodedValue, remainingPacket = self._decode_(inputPacket, forwardDecode)
+        
+        return {self.keyName:decodedValue}, remainingPacket
 
 
 #---- TOKEN TYPES ----
@@ -207,6 +238,20 @@ class unsignedInt(packetToken):
         encodeValue -- contains an unsigned integer.
         """
         return utilities.unsignedIntegerToBytes(encodeValue, self.size)
+    
+    def _decode_(self, inputPacket, forwardDecode):
+        """Decodes an unsigned integer of length self.size from either the front or back of the input packet.
+        
+        inputPacket -- the list of bytes containing a subset that represents an unsigned integer of size self.size
+        forwardDecode -- if true, the relevant bytes are at the front (left) of the input packet. If false, they are at the back.
+        """
+        if forwardDecode:   #work from the front of the inputPacket
+            decodedValue = utilities.bytesToUnsignedInteger(inputPacket[:self.size])
+            remainingPacket = inputPacket[self.size:]
+        else:   #work from the back of the inputPacket
+            decodedValue = utilities.bytesToUnsignedInteger(inputPacket[-self.size:])
+            remainingPacket = inputPacket[:-self.size]
+        return decodedValue, remainingPacket
 
 
 class length(packetToken):

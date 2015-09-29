@@ -10,7 +10,11 @@ import datetime
 import itertools
 
 def unsignedIntegerToBytes(integer, numbytes):
-    """Converts an unsigned integer into a sequence of bytes, LSB first."""
+    """Converts an unsigned integer into a sequence of bytes, LSB first.
+    
+    integer -- the number to be converted
+    numbytes -- the number of bytes to be used in representing the integer
+    """
     bytes = range(numbytes)
     for i in bytes:
         bytes[i] = int(integer%256)
@@ -20,6 +24,14 @@ def unsignedIntegerToBytes(integer, numbytes):
     if integer>0: raise IndexError('Overflow in conversion between uint and byte list.')
     else: return bytes
     
+def bytesToUnsignedInteger(byteList):
+    """Converts a little-endian sequence of bytes into an unsigned integer."""
+    value = 0   #initialize at 0
+    for order, byte in enumerate(byteList):
+        value += byte*(256**order)
+    return value
+
+
 def signedIntegerToTwosComplement(integer, size):
     """Converts a signed integer into an unsigned two's complement representation.
     
