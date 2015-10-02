@@ -38,11 +38,28 @@ def signedIntegerToTwosComplement(integer, size):
     integer -- the number to be converted.
     size -- the length in bytes of the two's complement number to be returned.
     """
-    if integer >= 0: return integer #integer is positive, so nothing needs to be done.
+    maxSize = (256**size)/2 - 1
+    if abs(integer) > maxSize: #integer cannot be expressed in size
+        raise ValueError("Cannot convert signed integer to twos complement. Input value of " + str(integer) + " exceeds maximum size (+/- " + str(maxSize)+").") 
+    if integer >= 0: return int(integer) #integer is positive, so nothing needs to be done.
     else:
         allOnes = 256**size - 1 # fills size bytes with all ones
-        return (allOnes^abs(integer)) + 1  #inverts just the bits comprising the original number, and adds one. This is two's complement!
-    
+        return (allOnes^abs(int(integer))) + 1  #inverts just the bits comprising the original number, and adds one. This is two's complement!
+
+def twosComplementToSignedInteger(twosComplement, size):
+    """Converts a twos-complement representation into a signed integer.
+     
+    twos-complement -- the number to be converted.
+    size -- the length in bytes of the two's complement input.
+    """
+           
+    signBitPosition = (size*8) - 1    #sign bit is the most significant bit
+    signBit = 2**signBitPosition    #a single bit in the MSB position
+    if(signBit & twosComplement):   #number is negative, need to take two's complement
+        allOnes = 256**size - 1 # fills size bytes with all ones
+        return -((twosComplement - 1)^allOnes)   #subtract one then flip bits, the is the inverse of encoding process.
+    else:
+        return twosComplement #positive number, no need to do anything.
  
 def flattenList(inputList):
     """Flattens shallow nested lists into a single list.

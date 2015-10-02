@@ -48,16 +48,16 @@ class template(object):
         self.template = list(self.template) #convert from tuple to list
         for token in self.template: token.parentTemplateName = self.name    # gives each token a reference to this template's name for error output.
         self.size = self.calculateTemplateSize(self.template)
-        self.validate()
+        self.validateTemplate()
     
-    def validate(self):
+    def validateTemplate(self):
         """Validates that template is properly composed."""
         
         errorFlag = False   #used to keep track of whether an error occured
         
         #run a series of tests
-        if self.size < 0:   # template has too many indeterminate tokens
-            errorMessage = "Cannot compose template " + self.name +". More than one tokens have indeterminate lengths!"
+        if self.size < 0:   # template has too many unbounded tokens
+            errorMessage = "Cannot compose template " + self.name +". More than one tokens have unbounded lengths!"
             errorFlag = True
         
         if errorFlag:
@@ -80,8 +80,8 @@ class template(object):
     def calculateTemplateSize(template):
         """Determines the size of a provided template.
         
-        Size will be returned as either > 1 for a determinate sized packet, 0 for packets of indeterminate size, and -1 for
-        packets with more than one tokens that have indeterminate sizes. This condition should fail the validation function.
+        Size will be returned as either > 1 for a determinate sized packet, 0 for packets of unbounded size, and -1 for
+        packets with more than one tokens that have unbounded sizes. This condition should fail the validation function.
         Note that the word size is used instead of length to distinguish from the length token, which can report size
         either self-inclusive or not, and does not include any checksums.
         
@@ -89,20 +89,20 @@ class template(object):
         
         return value:
             >1 -- size of template in  bytes
-            0 -- template has indeterminate size
-            -1 -- template is invalid, has more than one tokens of indeterminate size 
+            0 -- template has unbounded size
+            -1 -- template is invalid, has more than one tokens of unbounded size 
         """
         size = -1   #first pass value
         for token in template:  # iterate thru all tokens in the template
             if size == -1: # first pass
                 size = token.size
-            elif size == 0: # template size is indeterminate
-                if token.size == 0: # template contains at least two tokens of indeterminate size.
+            elif size == 0: # template size is unbounded
+                if token.size == 0: # template contains at least two tokens of unbounded size.
                     size = -1 # mark template as invalid
                     break   # no need to continue
             else:   #so far, template has a determinate size
-                if token.size == 0: #token has an indeterminate size
-                    size = 0    #template now  has an indeterminate size
+                if token.size == 0: #token has an unbounded size
+                    size = 0    #template now  has an unbounded size
                 else:
                     size += token.size
         return size
@@ -170,8 +170,6 @@ class template(object):
         return decodeDict, workingPacket
         
 
-
-
 class packetToken(object):
     """Base class for creating packet tokens, which are elements that handle encoding and decoding each segment of a packet."""
     
@@ -183,6 +181,8 @@ class packetToken(object):
         self.keyName = keyName  # permanently store keyName
         self.parentTemplateName = ""    #used for error output, this gets updated by the parent template upon its instantiation.
         self.requireEncodeDict = True   #by default, tokens require an encode dictionary in order to encode packets. Exceptions include length and checksum tokens.
+        self.decodeDirectionRequired = False    #Indicates whether a decode direction is required by the token subclass to be decoded properly.
+                                                #Used primarily for embedded templates.
         self.size = 0   # by default, tokens encode to and decode from a list of predetermined size. Exceptions incude pList, pString, and packet tokens.
                         # size = 0 means it has no predetermined size, which is a fail-safe default for validation.
         self.init(*args)    # call subclass init function to do something with additional arguments.
@@ -200,7 +200,7 @@ class packetToken(object):
         if self.keyName in encodeDict:  # keyName has a matching value in the encodeDict, proceed!
             return self._encode_(encodeDict[self.keyName], inProcessPacket) # call the subclass's _encode_ method for token-specific processing.
         elif self.requireEncodeDict: # no keyName has been found and dictionary required, so compose a useful error message and raise an exception.
-            if parentTemplateName: errorMessage = str(self.keyName) + " not found in template " + self.parentTemplateName + "."
+            if self.parentTemplateName: errorMessage = str(self.keyName) + " not found in template " + self.parentTemplateName + "."
             else: errorMessage = str(self.keyName) + " not found in template."
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary
@@ -212,10 +212,21 @@ class packetToken(object):
         forwardDecode -- if true, remove bytes from beginning of packet (left side), otherwise remove from the right.
         
         Each token will remove a quantity of bytes from the inputPacket and decode into a value. For tokens with fixed
-        size, a fixed number of bytes will be removed. If the size is indeterminate then the entire packet will be consumed.
+        size, a fixed number of bytes will be removed. If the size is unbounded then the entire packet will be consumed.
         """
-        
-        decodedValue, remainingPacket = self._decode_(inputPacket, forwardDecode)
+        #break apart input packet here to keep from repeating that work in every token
+        if self.size > 0:   #fixed size
+            if forwardDecode:   #working from the front of the inputPacket
+                decodePacket = inputPacket[:self.size]
+                remainingPacket = inputPacket[self.size:]
+            else:   #working from the back of the inputPacket
+                decodePacket = inputPacket[-self.size:]
+                remainingPacket = inputPacket[:-self.size]
+        else: #size is unbounded
+            decodePacket = inputPacket
+            remainingPacket = []
+            
+        decodedValue = self._decode_(decodePacket)
         
         return {self.keyName:decodedValue}, remainingPacket
 
@@ -225,7 +236,7 @@ class packetToken(object):
 class unsignedInt(packetToken):
     """An unsigned integer token type."""
     
-    def init(self, size = 1):
+    def init(self, size):
         """Initializes the unsigned integer token.
         
         size -- the length in bytes of the unsigned integer.
@@ -239,19 +250,12 @@ class unsignedInt(packetToken):
         """
         return utilities.unsignedIntegerToBytes(encodeValue, self.size)
     
-    def _decode_(self, inputPacket, forwardDecode):
-        """Decodes an unsigned integer of length self.size from either the front or back of the input packet.
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into an unsigned integer.
         
-        inputPacket -- the list of bytes containing a subset that represents an unsigned integer of size self.size
-        forwardDecode -- if true, the relevant bytes are at the front (left) of the input packet. If false, they are at the back.
+        decodePacket -- the ordered list of bytes to be converted into an unsigned integer.
         """
-        if forwardDecode:   #work from the front of the inputPacket
-            decodedValue = utilities.bytesToUnsignedInteger(inputPacket[:self.size])
-            remainingPacket = inputPacket[self.size:]
-        else:   #work from the back of the inputPacket
-            decodedValue = utilities.bytesToUnsignedInteger(inputPacket[-self.size:])
-            remainingPacket = inputPacket[:-self.size]
-        return decodedValue, remainingPacket
+        return utilities.bytesToUnsignedInteger(decodePacket)
 
 
 class length(packetToken):
@@ -280,6 +284,15 @@ class length(packetToken):
             if self.countSelf: length += 1
             return utilities.unsignedIntegerToBytes(length, self.size)  #convert to integer of lenth self.size
         else: return self   #no in-process packet has been provided.
+    
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into an unsigned integer ostensibly representing a length.
+        
+        decodePacket -- the ordered list of bytes to be converted into an unsigned integer.
+        
+        Note that no length validation is performed here.
+        """
+        return utilities.bytesToUnsignedInteger(decodePacket)
         
 
 class checksum(packetToken):
@@ -305,7 +318,16 @@ class checksum(packetToken):
             return self.CRCInstance.generate(checksumList)  #generate and return checksum
         else: return self
         
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into an unsigned integer ostensibly representing a checksum.
         
+        decodePacket -- the ordered list of bytes to be converted into an unsigned integer.
+        
+        Note that no checksum validation is performed here.
+        """
+        return utilities.bytesToUnsignedInteger(decodePacket)
+
+
 class pList(packetToken):
     """A list-type token.
     
@@ -321,6 +343,13 @@ class pList(packetToken):
         encodeValue -- contains the list to be inserted.
         """
         return encodeValue
+
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a list.
+        
+        This decode function is super easy. Because its size is unbounded, it returns exactly what was fed into it.
+        """
+        return decodePacket
 
 
 class pString(packetToken):
@@ -338,6 +367,13 @@ class pString(packetToken):
         encodeValue -- contains the string to be converted and inserted.
         """
         return utilities.stringToList(encodeValue)
+    
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a string.
+        
+        decodePacket -- the list to be converted into a string.
+        """
+        return utilities.listToString(decodePacket)
 
 
 class packet(packetToken):
@@ -356,6 +392,13 @@ class packet(packetToken):
         encodeValue -- contains a packets.packet instance.
         """
         return list(encodeValue)
+    
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a packets.serializedPacket object.
+        
+        decodePacket -- the list to be converted into a serializd packet object.
+        """
+        return serializedPacket(decodePacket)
 
 
 class packetTemplate(packetToken):
@@ -367,17 +410,26 @@ class packetTemplate(packetToken):
         """Initializes packet template token.
         
         template -- a packets.template instance.
+        
+        This token is a direct pass-thru to the child template, and is provided for legibility.
         """
         self.template = template
         self.size = self.template.size    #inherits fixed size from child template
+        self.requireEncodeDict = False  #This token is just a pass-thru to the template
     
-    def _encode_(self, encodeValue, inProcessPacket):
+    def encode(self, encodeDict):
         """Encodes the nested packet template using the provided encoding dictionary.
         
-        encodeValue -- contains the encoding dictionary to be encoded by the template.
+        encodeDict -- contains the encoding dictionary to be encoded by the template.
         """
-        return self.template.encode(encodeValue)
+        return self.template.encode(encodeDict)
 
+    def decode(self, inputPacket, forwardDecode):
+        """Decodes child template by passing along decode call.
+        
+        Unlike most packet tokens, this one overrides the parent class's decode method.
+        """
+        return self.template.decode(inputPacket, forwardDecode)
 
 class signedInt(packetToken):
     """A signed integer token."""
@@ -395,7 +447,15 @@ class signedInt(packetToken):
         """
         twosComplementRepresentation = utilities.signedIntegerToTwosComplement(encodeValue, self.size)  #note that function handles both pos and neg numbers.
         return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size) # convert to byte list.
+
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a signed integer of length self.size.
         
+        decodePacket -- the ordered list of bytes to be converted into an unsigned integer.
+        """
+        twosComplementInteger = utilities.bytesToUnsignedInteger(decodePacket)
+        return utilities.twosComplementToSignedInteger(twosComplementInteger, self.size)
+           
 
 class fixedPoint(packetToken):
     """A signed fixed point decimal token."""
@@ -406,7 +466,7 @@ class fixedPoint(packetToken):
         fractionalBits -- number of fractionalBits. Y in X.Y.
         
         Note that integerBits + fractionalBits will be packed into the smallest possible number of bytes.
-        Ideally integerBits + fractionalBits is divisible by 8.
+        Ideally integerBits + fractionalBits + 1 (sign bit) is divisible by 8.
         """
         self.integerBits = integerBits
         self.fractionalBits = fractionalBits
@@ -419,4 +479,12 @@ class fixedPoint(packetToken):
         twosComplementRepresentation = utilities.signedIntegerToTwosComplement(int(bitShiftedValue), self.size) # convert to twos complement
         return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size)    #convert to byte list
         
-
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a fixed point signed decimal.
+        
+        decodePacket -- the ordered list of bytes to be converted into a fixed point decimal.
+        """
+        twosComplementRepresentation = utilities.bytesToUnsignedInteger(decodePacket)
+        signedInteger = utilities.twosComplementToSignedInteger(twosComplementRepresentation, self.size)
+        bitShiftedValue = float(signedInteger)/(2**self.fractionalBits)
+        return bitShiftedValue
