@@ -19,3 +19,5 @@ import pygestalt.packets
 # -> each token encodes and decodes correctly over a range of values and edge cases
 # -> end-to-end tests of packet configurations including weird ones like checksum in the middle, etc.
 # -> in fixed-point token make sure that number of specified bits plus the sign bit adds up to an integer # of bytes, to prevent user error.
+# -> no duplicate token names, even across embedded templates
+

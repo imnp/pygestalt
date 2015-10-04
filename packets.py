@@ -145,7 +145,7 @@ class template(object):
         workingPacket -- whatever packet remains after decoding. If template is not embedded in another template, this should be []
         """
         workingPacket = list(inputPacket) # converts packets.packet to a list, and establishes a working copy.
-        if forwardDecode:
+        if forwardDecode:   #template direction depends on decode direction
             workingTemplate = self.template
         else:
             workingTemplate = [token for token in reversed(self.template)]  #generate a reverse template 
@@ -168,6 +168,113 @@ class template(object):
             decodeDict.update(decodedKeyValuePairs)  #update decodeDict with key:value pairs decoded by token
         
         return decodeDict, workingPacket
+    
+    def findTokenPosition(self, tokenName, inputPacket, forwardDecode = True):
+        """Returns the index range that a referenced token spans in the input packet.
+        
+        tokenName -- the string name of the token to be found
+        inputPacket -- the input packet to be analyzed by the template while searching for the token.
+        
+        Uses the same decoding algorithm as the decode function, but rather than passing the packet to each token
+        for digestion, each token's size attribute is used to advance (or decrement if a reverse pass) the index position.
+        This function is typically used internally to do things like validate a checksum.
+        
+        Returns (indexRange, token) where:
+        startIndex -- the beginning index of the sub-list matching the token
+        endIndex -- the ending index of the sub-list matching the token
+        token -- the token object whose name is provided by the tokenName input argument.
+        """
+        
+        workingPacket = list(inputPacket) # converts packets.packet type to a list, and establishes a working copy.
+        packetLength = len(workingPacket) # length of packet
+        if forwardDecode:   #template direction depends on on decode direction
+            workingTemplate = self.template
+            searchIndexPosition = 0 #keeps track of the starting index of the token currently being examined, from the start of the packet
+        else:
+            workingTemplate = [token for token in reversed(self.template)]
+            searchIndexPosition = packetLength  #working from end of packet, so index starts there
+        
+        #PRIMARY PASS -- iterate over template in primary direction
+        for tokenIndex, token in enumerate(workingTemplate):
+            if token.size > 0:  #token has finite size, continue with primary pass
+                if forwardDecode:   #calculate token span indices
+                    tokenStartIndex = searchIndexPosition #going forward, so token starts at the search index position
+                    tokenEndIndex = searchIndexPosition + token.size #offset forwards by the token size
+                else:
+                    tokenStartIndex = searchIndexPosition - token.size #going in reverse, so token starts at the search index position offset in reverse by the token length
+                    tokenEndIndex = searchIndexPosition
+                
+                if type(token) == template or type(token) == packetTemplate: #the token is another template, forward on the search to it.
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    tokenEndIndex = tokenStartIndex + searchEndIndex
+                    tokenStartIndex += searchStartIndex
+                    if searchToken != None: #Token found in embedded template!
+                        return tokenStartIndex, tokenEndIndex, searchToken
+                else:   #not an embedded template
+                    if token.keyName == tokenName: #Found! This happens after checking for templates because those have names but should be recursively searched, not returned.
+                        return tokenStartIndex, tokenEndIndex, token
+                
+                #token not found, update search index position and continue
+                if forwardDecode: searchIndexPosition = tokenEndIndex
+                else: searchIndexPosition = tokenStartIndex
+                continue
+            else:  #token has unbounded size, begin secondary pass
+                tokenIndex -= 1 #roll back tokenIndex so that it is included in secondary pass
+                break #go on to secondary pass
+        
+        # SECONDARY PASS -- iterate over remaining template in reverse direction
+        forwardDecode = not(forwardDecode)  #reverse the direction of decoding
+        primaryPassSearchIndexPosition = searchIndexPosition
+        if forwardDecode:
+            searchIndexPosition = 0
+        else:
+            searchIndexPosition = packetLength
+            
+        for token in reversed(workingTemplate[tokenIndex+1:]):    #tokenForwardIndex + 1 is the next token in the template. If no secondary pass, this will iterate over an empty list
+            if token.size > 0:  #token has finite size, continue with primary pass
+                if forwardDecode:   #calculate token span indices
+                    tokenStartIndex = searchIndexPosition #going forward, so token starts at the search index position
+                    tokenEndIndex = searchIndexPosition + token.size #offset forwards by the token size
+                else:
+                    tokenStartIndex = searchIndexPosition - token.size #going in reverse, so token starts at the search index position offset in reverse by the token length
+                    tokenEndIndex = searchIndexPosition
+                
+                if type(token) == template or type(token) == packetTemplate: #the token is another template, forward on the search to it.
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    tokenEndIndex = tokenStartIndex + searchEndIndex
+                    tokenStartIndex += searchStartIndex
+                    if searchToken != None: #Token found in embedded template!
+                        return tokenStartIndex, tokenEndIndex, searchToken
+                else:   #not an embedded template
+                    if token.keyName == tokenName: #Found! This happens after checking for templates because those have names but should be recursively searched, not returned.
+                        return tokenStartIndex, tokenEndIndex, token
+                
+                #token not found, update search index position and continue
+                if forwardDecode: searchIndexPostion = tokenEndIndex
+                else: searchIndexPosition = tokenStartIndex
+                continue
+            else:   #token has unbounded size
+                if forwardDecode:
+                    tokenStartIndex = searchIndexPosition
+                    tokenEndIndex = primaryPassSearchIndexPosition    #token is unbounded, so ends at packet end
+                else:
+                    tokenStartIndex = primaryPassSearchIndexPosition #going in reverse, so start is beginning of packet
+                    tokenEndIndex = searchIndexPosition
+                    
+                if type(token) == template or type(token) == packetTemplate:
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    tokenEndIndex = tokenStartIndex + searchEndIndex
+                    tokenStartIndex += searchStartIndex
+                    if searchToken != None: # Token found in embedded template
+                        return tokenStartIndex, tokenEndIndex, searchToken
+                else: #not a template
+                    if token.keyName == tokenName: #Found!
+                        return tokenStartIndex, tokenEndIndex, token
+        
+        #No token found!
+        return 0, packetLength, None # return indices for the entire input packet
+                    
+                                                    
         
 
 class packetToken(object):
@@ -181,8 +288,6 @@ class packetToken(object):
         self.keyName = keyName  # permanently store keyName
         self.parentTemplateName = ""    #used for error output, this gets updated by the parent template upon its instantiation.
         self.requireEncodeDict = True   #by default, tokens require an encode dictionary in order to encode packets. Exceptions include length and checksum tokens.
-        self.decodeDirectionRequired = False    #Indicates whether a decode direction is required by the token subclass to be decoded properly.
-                                                #Used primarily for embedded templates.
         self.size = 0   # by default, tokens encode to and decode from a list of predetermined size. Exceptions incude pList, pString, and packet tokens.
                         # size = 0 means it has no predetermined size, which is a fail-safe default for validation.
         self.init(*args)    # call subclass init function to do something with additional arguments.
@@ -205,7 +310,7 @@ class packetToken(object):
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary
         
-    def decode(self, inputPacket, forwardDecode):
+    def decode(self, inputPacket, forwardDecode = True):
         """Extracts relevant bytes from a packet and converts into a key:value pair using the sublcass's _decode_ method.
         
         inputPacket -- the list of bytes from which to extract the information represented by the token.

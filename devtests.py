@@ -2,6 +2,7 @@
 
 from pygestalt import packets
 from pygestalt import utilities
+import copy
 
 # Define Packets
 
@@ -29,4 +30,27 @@ decodedGestaltPacket, remainder = gestaltPacket.decode(encodedGestaltPacket)
 
 decodedPayloadPacket, remainder = payloadTestPacket.decode(decodedGestaltPacket['_payload_'])
 
-print decodedPayloadPacket
+embeddedTestPacket = packets.template('embeddedTestPacket',
+                                      packets.unsignedInt('zPosition',2),
+                                      payloadTestPacket,
+                                      packets.fixedPoint('temperatureSensor', 0, 15))
+
+embeddedDict = copy.copy(payloadDict)
+
+embeddedDict.update({'zPosition':7272, 'temperatureSensor':0.501})
+
+encodedEmbeddedPacket = embeddedTestPacket.encode(embeddedDict)
+gestaltDict['_payload_'] = encodedEmbeddedPacket
+encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
+
+decodedGestaltPacket = gestaltPacket.decode(encodedGestaltPacket)[0]
+gestaltPayload = decodedGestaltPacket['_payload_']
+
+gestaltPayloadStartIndex, gestaltPayloadEndIndex, gestaltPayloadToken = gestaltPacket.findTokenPosition('_payload_', encodedGestaltPacket)
+searchedPayload = encodedGestaltPacket[gestaltPayloadStartIndex:gestaltPayloadEndIndex]
+print searchedPayload
+
+decodedEmbeddedPacket = embeddedTestPacket.decode(searchedPayload)[0]
+
+startIndex, endIndex, token = embeddedTestPacket.findTokenPosition('temperatureSensor', searchedPayload)
+print token.decode(searchedPayload[startIndex: endIndex])[0]
