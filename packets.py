@@ -28,7 +28,7 @@ class serializedPacket(list):
     
     def toList(self):
         """A shortcut to get the serialized packet in the form of a stripped list."""
-        
+        return list(self)
         
 class template(object):
     """Stores the formatting used to encode and decode serialized data packets."""
@@ -535,6 +535,13 @@ class packetTemplate(packetToken):
         Unlike most packet tokens, this one overrides the parent class's decode method.
         """
         return self.template.decode(inputPacket, forwardDecode)
+    
+    def findTokenPosition(self, tokenName, inputPacket, forwardDecode = True):
+        """Returns the index range that a referenced token spans in the input packet.
+        
+        As with the other functions in this class, just forwards the request on to the child template.
+        """
+        return self.template.findTokenPosition(tokenName, inputPacket, forwardDecode)
 
 class signedInt(packetToken):
     """A signed integer token."""

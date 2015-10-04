@@ -32,7 +32,7 @@ decodedPayloadPacket, remainder = payloadTestPacket.decode(decodedGestaltPacket[
 
 embeddedTestPacket = packets.template('embeddedTestPacket',
                                       packets.unsignedInt('zPosition',2),
-                                      payloadTestPacket,
+                                      packets.packetTemplate('myTemplate', payloadTestPacket),
                                       packets.fixedPoint('temperatureSensor', 0, 15))
 
 embeddedDict = copy.copy(payloadDict)
