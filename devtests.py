@@ -25,32 +25,35 @@ encodedPayloadPacket = payloadTestPacket.encode(payloadDict)
 
 gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':encodedPayloadPacket}
 encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
+print encodedGestaltPacket
+myEncodedPacket = [72, 1, 0, 72, 25, 1, 4, 0, 252, 1, 128, 119, 119, 119, 46, 102, 97, 98, 117, 110, 105, 116, 46, 99, 111, 109, 203]
+print gestaltPacket.validateChecksum('_checksum_', myEncodedPacket)
 
 decodedGestaltPacket, remainder = gestaltPacket.decode(encodedGestaltPacket)
 
 decodedPayloadPacket, remainder = payloadTestPacket.decode(decodedGestaltPacket['_payload_'])
 
-embeddedTestPacket = packets.template('embeddedTestPacket',
-                                      packets.unsignedInt('zPosition',2),
-                                      packets.packetTemplate('myTemplate', payloadTestPacket),
-                                      packets.fixedPoint('temperatureSensor', 0, 15))
-
-embeddedDict = copy.copy(payloadDict)
-
-embeddedDict.update({'zPosition':7272, 'temperatureSensor':0.501})
-
-encodedEmbeddedPacket = embeddedTestPacket.encode(embeddedDict)
-gestaltDict['_payload_'] = encodedEmbeddedPacket
-encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
-
-decodedGestaltPacket = gestaltPacket.decode(encodedGestaltPacket)[0]
-gestaltPayload = decodedGestaltPacket['_payload_']
-
-gestaltPayloadStartIndex, gestaltPayloadEndIndex, gestaltPayloadToken = gestaltPacket.findTokenPosition('_payload_', encodedGestaltPacket)
-searchedPayload = encodedGestaltPacket[gestaltPayloadStartIndex:gestaltPayloadEndIndex]
-print searchedPayload
-
-decodedEmbeddedPacket = embeddedTestPacket.decode(searchedPayload)[0]
-
-startIndex, endIndex, token = embeddedTestPacket.findTokenPosition('temperatureSensor', searchedPayload)
-print token.decode(searchedPayload[startIndex: endIndex])[0]
+# embeddedTestPacket = packets.template('embeddedTestPacket',
+#                                       packets.unsignedInt('zPosition',2),
+#                                       packets.packetTemplate('myTemplate', payloadTestPacket),
+#                                       packets.fixedPoint('temperatureSensor', 0, 15))
+# 
+# embeddedDict = copy.copy(payloadDict)
+# 
+# embeddedDict.update({'zPosition':7272, 'temperatureSensor':0.501})
+# 
+# encodedEmbeddedPacket = embeddedTestPacket.encode(embeddedDict)
+# gestaltDict['_payload_'] = encodedEmbeddedPacket
+# encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
+# 
+# decodedGestaltPacket = gestaltPacket.decode(encodedGestaltPacket)[0]
+# gestaltPayload = decodedGestaltPacket['_payload_']
+# 
+# gestaltPayloadStartIndex, gestaltPayloadEndIndex, gestaltPayloadToken = gestaltPacket.findTokenPosition('_payload_', encodedGestaltPacket)
+# searchedPayload = encodedGestaltPacket[gestaltPayloadStartIndex:gestaltPayloadEndIndex]
+# print searchedPayload
+# 
+# decodedEmbeddedPacket = embeddedTestPacket.decode(searchedPayload)[0]
+# 
+# startIndex, endIndex, token = embeddedTestPacket.findTokenPosition('temperatureSensor', searchedPayload)
+# print token.decode(searchedPayload[startIndex: endIndex])[0]

@@ -62,6 +62,21 @@ class template(object):
         
         if errorFlag:
             raise errors.CompositionError(errorMessage)
+    
+    def validateChecksum(self, checksumName, inputPacket):
+        """Compares the packet's checksum with the calculated checksum and returns true if equal.
+        
+        checksumName -- the text name of the checksum token in the packet template.
+        inputPacket -- the packet to be validated.
+        
+        The checksum data is extracted from the packet, and the checksum token is used to calculate
+        the checksum of the remainder of the packet. Then the provided and calculated checksums are compared.
+        """
+        tokenStartIndex, tokenEndIndex, checksumToken = self.findTokenPosition(checksumName, inputPacket)   #locate checksum position in packet
+        providedChecksum = inputPacket[tokenStartIndex:tokenEndIndex][0] #isolate checksome value from packet. Comes in as list so pull integer.
+        remainingPacket = inputPacket[:tokenStartIndex] + inputPacket[tokenEndIndex:] #strip out checksum value from packet
+        calculatedChecksum = checksumToken.encode(encodeDict = {}, inProcessPacket = remainingPacket) #calculate checksum of remaining packet
+        return calculatedChecksum == providedChecksum #return comparison of checksums
             
     def __call__(self, input):
         """A shortcut to either encode or decode a packet.
