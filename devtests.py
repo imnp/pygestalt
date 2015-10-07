@@ -2,6 +2,7 @@
 
 from pygestalt import packets
 from pygestalt import utilities
+from pygestalt import core
 import copy
 
 # Define Packets
@@ -57,3 +58,11 @@ decodedPayloadPacket, remainder = payloadTestPacket.decode(decodedGestaltPacket[
 # 
 # startIndex, endIndex, token = embeddedTestPacket.findTokenPosition('temperatureSensor', searchedPayload)
 # print token.decode(searchedPayload[startIndex: endIndex])[0]
+
+class getTuna(core.actionObject):
+    def init(self, name):
+        self.name = name
+
+x = getTuna('charlie')
+print x
+print payloadTestPacket
