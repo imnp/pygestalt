@@ -26,9 +26,10 @@ class actionObject(object):
     def __new__(cls, *args, **kwargs):
         """Intantiation routine for actionObject base class.
         
-        When a call is made to the action object class, an instance is created and this function is called.
-        Any arguments are passed along to the subclass's init() function, which may either return the instance
-        itself or NEED TO REWRITE THIS DESCRIPTION
+        When a call is made to the action object class, this "magic" function creates the instance.
+        Any arguments are passed along to the subclass's init() function, which may either return a value or None.
+        If nothing is returned, as is the case in typical __init__ methods, then we return the actionObject. But
+        if a return value is provided by the user (i.e. the interpreted reply of a real node), this is passed along.
         """
         newActionObject = object.__new__(cls)   #creates the new actionObject
         newActionObject._init_()    #runs the actionObject base class's initialization. Note that
@@ -42,7 +43,14 @@ class actionObject(object):
             return returnValue
         
     def _init_(self):
-        print "init got called"
+        """actionObject initialization method.
+        
+        Note that no arguments are provided because user-supplied arguments are handled strictly by the subclass's init() method.
+        """
+        pass
         
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
+        """actionObject subclass's initialization routine.
+        
+        This should be overridden by the user-defined subclass."""
         pass
