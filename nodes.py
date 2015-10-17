@@ -41,15 +41,18 @@ class baseGestaltNode(baseVirtualNode):
         if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self, *args, **kwargs) #initialize ports
         if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self, *args, **kwargs) #run after initialization is complete
         
-    def _init_(self, *args, **kwargs):
+    def _init_(self):
         '''Initializes Gestalt Node.
         
         Initialization occurs by calling a sequence of specialized initialization functions. In order to
         support inheritance, and to make sure that all of the inherited functions are called, the parent
         class initialization functions must be called recursively. This function is the entry point into
         the process and starts at a recursion depth of 0.
+        
+        Note that _initArgs_ and _initKwargs_ are the arguments provided to the virtual node when it was
+        first instantiated. They are stored by the baseVirtualNode.
         '''
-        self._recursiveInit_(0, *args, **kwargs) #begin recursive initialization at a depth of 0.
+        self._recursiveInit_(0, *self._initArgs_, **self._initKwargs_) #begin recursive initialization at a depth of 0.
     
     def initParameters(self, *args, **kwargs):
         '''Initializes optional constants etc. that are specific to the node hardware.
