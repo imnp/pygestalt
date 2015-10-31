@@ -30,6 +30,39 @@ class serializedPacket(list):
         """A shortcut to get the serialized packet in the form of a stripped list."""
         return list(self)
         
+
+class emptyTemplate(object):
+    """A template that encodes and decodes no tokens.
+    
+    The reason for a breaking this out into a seperate class is that the standard template class MUST contain tokens
+    because of how the length verification works.
+    """
+    def __init__(self, name = ""):
+        """Initialize the empty template."""
+        self.name = name
+        self.template = []
+    
+    def __call__(self, input):
+        """A shortcut to either encode or decode a packet.
+        
+        Calling the template instance directly will have the effect of either
+        encoding or decoding a packet, depending on the type provided as input.
+        
+        input -- if a dict, will return an EMPTY packet. If a list or packet, will return a EMPTY dictionary.
+        """
+        if type(input) == dict: # Provided input is a dictionary, so user wants to encode dictionary as packet.
+            return self.encode(input)
+        if type(input) == list or type(input) == packet:    # Provided input is a list or packet, so user wants to decode into a dictionary
+            return self.decode(input)
+        
+    def encode(self, input):
+        """Returns an empty packet."""
+        return serializedPacket([], self)
+    
+    def decode(self, input):
+        """Returns an empty dictionary following the same format as template.decode"""
+        return {}, []   #empty dictionary, empty working packet
+
 class template(object):
     """Stores the formatting used to encode and decode serialized data packets."""
     def __init__(self, *packetTokens):
@@ -95,7 +128,7 @@ class template(object):
     def calculateTemplateSize(template):
         """Determines the size of a provided template.
         
-        Size will be returned as either > 1 for a determinate sized packet, 0 for packets of unbounded size, and -1 for
+        Size will be returned as either > 0 for a determinate sized packet, 0 for packets of unbounded size, and -1 for
         packets with more than one tokens that have unbounded sizes. This condition should fail the validation function.
         Note that the word size is used instead of length to distinguish from the length token, which can report size
         either self-inclusive or not, and does not include any checksums.
@@ -103,7 +136,7 @@ class template(object):
         template -- the template whose size should be calculated.
         
         return value:
-            >1 -- size of template in  bytes
+            >0 -- size of template in  bytes
             0 -- template has unbounded size
             -1 -- template is invalid, has more than one tokens of unbounded size 
         """

@@ -22,6 +22,12 @@ class actionObject(object):
     properties along with instance properties.
     """
     
+    #Explicitly define parameters here. These get set to real values when the actionObject is bound to a port by
+    #nodes.baseGestaltNode.bindPort()
+    _port_ = None
+    _inboundPacketFlag_ = None
+    _outboundTemplate_ = None
+    _inboundTemplate_ = None
     
     def __new__(cls, *args, **kwargs):
         """Intantiation routine for actionObject base class.
@@ -54,3 +60,21 @@ class actionObject(object):
         
         This should be overridden by the user-defined subclass."""
         pass
+    
+
+#--- GENERIC ACTION OBJECTS ---
+class genericActionObject(actionObject):
+    """A perfectly generic actionObject type."""
+    pass
+
+class genericOutboundActionObjectBlockOnReply(actionObject):
+    """A generic actionObject type designed to transmit and block until a reply is received."""
+    pass
+
+class genericOutboundActionObject(actionObject):
+    """A generic actionObject type designed to transmit (but not block)."""
+    pass
+
+class genericInboundActionObject(actionObject):
+    """A generic actionObject type designed to receive."""
+    pass

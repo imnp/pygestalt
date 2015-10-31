@@ -7,14 +7,14 @@ from pygestalt import nodes
 import copy
 
 # Define Packets
-
-# gestaltPacket = packets.template('gestaltPacketTemplate',
-#                                        packets.unsignedInt('_startByte_',1),
-#                                        packets.unsignedInt('_address_', 2),
-#                                        packets.unsignedInt('_port_', 1),
-#                                        packets.length('_length_'),
-#                                        packets.packet('_payload_'),
-#                                        packets.checksum('_checksum_'))
+# payloadTestPacket = packets.template('port5Default')
+gestaltPacket = packets.template('gestaltPacketTemplate',
+                                       packets.unsignedInt('_startByte_',1),
+                                       packets.unsignedInt('_address_', 2),
+                                       packets.unsignedInt('_port_', 1),
+                                       packets.length('_length_'),
+                                       packets.packet('_payload_'),
+                                       packets.checksum('_checksum_'))
 # 
 # payloadTestPacket = packets.template('payloadTestPacket',
 #                                      packets.unsignedInt('xPosition', 2),
@@ -26,8 +26,9 @@ import copy
 # encodedPayloadPacket = payloadTestPacket.encode(payloadDict)
 # 
 # gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':encodedPayloadPacket}
-# encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
-# print encodedGestaltPacket
+gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':[]}
+encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
+print encodedGestaltPacket
 # myEncodedPacket = [72, 1, 0, 72, 25, 1, 4, 0, 252, 1, 128, 119, 119, 119, 46, 102, 97, 98, 117, 110, 105, 116, 46, 99, 111, 109, 203]
 # print gestaltPacket.validateChecksum('_checksum_', myEncodedPacket)
 # 
@@ -69,14 +70,11 @@ import copy
 # x = getTuna('charlie')
 # print x
 
-class gestaltNode(nodes.baseGestaltNode):
-    def initPackets(self):
-        print "gestaltNode.initPackets:" + str(self)
-    pass
 
-class myGestaltNode(gestaltNode):
-    def initPorts(self):
-        print "myGestaltNode.initPorts:" + str(self)
 
-myGestaltNode = myGestaltNode()
-myGestaltNode._init_()
+# # The code below tests whether actionObject classes are being copied
+
+myGestaltNode = nodes.baseGestaltNode()
+print core.genericOutboundActionObjectBlockOnReply._port_
+
+myGestaltNode.bindPort(5)

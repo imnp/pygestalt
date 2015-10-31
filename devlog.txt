@@ -1,0 +1,4 @@
+October 24th, 2015
+
+I've encountered an annoying issue, which stems from wanting to set class properties for actionObject classes. bindPort does this to associate
+actionObject classes with specific ports. But the problem is that I'd like nodes to be able to inherit other nodes. For this to work, 
