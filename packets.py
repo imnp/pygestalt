@@ -484,11 +484,11 @@ class checksum(packetToken):
 class pList(packetToken):
     """A list-type token.
     
-    Note that no length is provided, and whatever list is provided will be passed thru.
+    Note that if no length is provided, whatever list is provided will be passed thru.
     """
-    def init(self):
+    def init(self, size = 0):
         """Initializer for pList token type."""
-        self.size = 0  # length is determined by the run-time input to the encoder or decoder
+        self.size = size  # if 0, length is determined by the run-time input to the encoder or decoder
     
     def _encode_(self, encodeValue, inProcessPacket):
         """Inserts the list provided in encodeValue into the packet.
@@ -508,11 +508,11 @@ class pList(packetToken):
 class pString(packetToken):
     """A string-type token.
     
-    Note that no length is provided, and whatever string is provided will be converted to a list and passed thru.
+    Note that if no length is provided, whatever string is provided will be converted to a list and passed thru.
     """
-    def init(self):
+    def init(self, size = 0):
         """Initializer for pString token type."""
-        self.size = 0  # length is determined by the runt-time input to the encoder or decoder
+        self.size = size  # if 0, length is determined by the run-time input to the encoder or decoder
         
     def _encode_(self, encodeValue, inProcessPacket):
         """Converts string into a list.

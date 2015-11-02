@@ -186,5 +186,19 @@ class gestaltNode(baseGestaltNode):
     functionality is captured in baseGestaltNode. The intention is that this class gets subclassed by all
     Gestalt virtual nodes.
     """
-    pass
+    def init(self):
+        """Initialiation routine for gestalt node."""
+        self.bootPageSize = 128     #bootloader page size in bytes
+    
+    def initPackets(self):
+        """Define packet templates."""
+        
+        #Node Status
+        self.statusResponsePacket = packets.template('statusResponse',
+                                                     packets.pString('status', 1),  #status is encoded as 'b' for bootloader, and 'a' for application
+                                                     packets.unsignedInt('appValidity', 1)) #application validity byte, gets set to 170 if valid
+        
+        #Bootloader Command
+        self.bootCommandRequestPacket = packets.template('commandRequest',
+                                                         packets.unsignedInt('commandCode',1))
     
