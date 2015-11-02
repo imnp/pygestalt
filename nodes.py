@@ -16,7 +16,7 @@ class baseVirtualNode(object):
         
         Because of the indirect way in which nodes are loaded, the arguments passed to the node
         on instantiation are stored by this routine, and then passed to additional initialization
-        functions later after the node has been provided with all necessary references during load.
+        functions (_init_ for gestalt nodes) later after the node has been set into the node shell.
         """
         self._initArgs_ = args
         self._initKwargs_ = kwargs
@@ -33,8 +33,8 @@ class baseGestaltNode(baseVirtualNode):
         
         THIS FUNCTION IS ONLY CALLED INTERNALLY BY _init_
         Initialization occurs in the following steps:
-        1) parent class initialization: a call to super()_init_()
-        2) parameters: optional constants etc. that are specific to the node
+        1) parent class initialization: a call to parentClass._recursiveInit_
+        2) init: user initialization routine for defining optional constants etc. that are specific to the node
         3) packets: packet templates are defined here
         4) ports: actionObjects and packets are bound to ports
         5) onLoad: anything that needs to get initialized with the ability to communicate to the node.
@@ -42,10 +42,10 @@ class baseGestaltNode(baseVirtualNode):
         baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
         parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
         parentClass._recursiveInit_(self, recursionDepth + 1, *args, **kwargs) #recursively initialize using parent class
-        if 'initParameters' in baseClass.__dict__: baseClass.initParameters(self, *args, **kwargs) #initialize parameters
-        if 'initPackets' in baseClass.__dict__: baseClass.initPackets(self, *args, **kwargs) #initialize packets
-        if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self, *args, **kwargs) #initialize ports
-        if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self, *args, **kwargs) #run after initialization is complete
+        if 'init' in baseClass.__dict__: baseClass.init(self, *args, **kwargs) #run user initialization routine with provided arguments
+        if 'initPackets' in baseClass.__dict__: baseClass.initPackets(self) #initialize packets
+        if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self) #initialize ports
+        if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self) #run after initialization is complete
         
     def _init_(self):
         """Initializes Gestalt Node.
@@ -63,22 +63,22 @@ class baseGestaltNode(baseVirtualNode):
         
         self._recursiveInit_(0, *self._initArgs_, **self._initKwargs_) #begin recursive initialization at a depth of 0.
     
-    def initParameters(self, *args, **kwargs):
-        """Initializes optional constants etc. that are specific to the node hardware.
+    def init(self, *args, **kwargs):
+        """User initialization routine for defining optional constants etc. that are specific to the node hardware.
         
         Examples of this might be the crystal frequency, or an ADC reference voltage.
         """
         pass
     
-    def initPackets(self, *args, **kwargs):
+    def initPackets(self):
         """Initializes packet templates."""
         pass
     
-    def initPorts(self, *args, **kwargs):
+    def initPorts(self):
         """Bind actionObjects and packets to ports."""
         pass
     
-    def onLoad(self, *args, **kwargs):
+    def onLoad(self):
         """Run any initialization functions that must communicate with the physical node.
         
         An example might be setting some default parameters on the node.
@@ -105,24 +105,28 @@ class baseGestaltNode(baseVirtualNode):
         if outboundFunction != None:    #an outbound function has been provided
             outboundActionObjectClass = self.addDerivedType(outboundFunction)   #this is the class that will actually get called to instantiate action objects
                                                                                 #during use. It is a derived class of the provided outboundFunction class. 
+            outboundActionObjectClass._baseActionObject_ = outboundFunction            #store the base class for introspection use later
         else: #no outbound function has been provided, must generate one.
             typeName = "outboundActionObjectOnPort"+ str(port)    #make up a name that is unique
             outboundActionObjectClass = self.addDerivedType(core.genericOutboundActionObjectBlockOnReply, typeName)
+            outboundActionObjectClass._baseActionObject_ = core.genericOutboundActionObjectBlockOnReply
         
         if inboundFunction != None: #an inbound function has been provided
             inboundActionObjectClass = self.addDerivedType(inboundFunction)
+            inboundActionObjectClass._baseActionObject_ = inboundFunction
         else: #no inbound function has been provided, must generate one
             typeName = "inboundActionObjectOnPort" + str(port)    #make up a name that is unique
             inboundActionObjectClass = self.addDerivedType(core.genericInboundActionObject, typeName)
+            inboundActionObjectClass._baseActionObject_ = inboundFunction
         
         #GENERATE MISSING PACKET TEMPLATES
         if outboundTemplate == None:
             templateName = 'outboundTemplateOnPort' + str(port)
-            outboundTemplate = packets.template(templateName)
+            outboundTemplate = packets.emptyTemplate(templateName)  #must use an emptyTemplate type because template cannot have an empty list of tokens
         
         if inboundTemplate == None:
             templateName = 'inboundTemplateOnPort' + str(port)
-            inboundTemplate = packets.template(templateName)
+            inboundTemplate = packets.emptyTemplate(templateName)
         
         #STORE PARAMETERS IN actionObject CLASSES
         outboundActionObjectClass._port_ = port #store port number
@@ -136,6 +140,10 @@ class baseGestaltNode(baseVirtualNode):
         
         outboundActionObjectClass._inboundTemplate_ = inboundTemplate #store inbound packet template
         inboundActionObjectClass._inboundTemplate_ = inboundTemplate
+        
+        #UPDATE VIRUAL NODE PORT DICTIONARIES
+        self._outboundPortTable_.update({outboundActionObjectClass:port})
+        self._inboundPortTable_.update({port:inboundActionObjectClass})
     
     def addDerivedType(self, baseClass, name = None):
         """Creates a new type using baseClass as the base, and adds the baseClass entry in self.__dict__.
@@ -164,3 +172,19 @@ class baseGestaltNode(baseVirtualNode):
         newType = type(typeName,(baseClass,) ,{}) #create new type
         self.__dict__.update({typeName:newType})
         return newType
+    
+class gestaltNode(baseGestaltNode):
+    """The standard Gestalt node class.
+    
+    This class defines the standard functionality that any gestalt node must exhibit, including:
+    - provisions for acquiring the node on a network
+    - setting the node address
+    - coming out of bootloader mode (if applicable)
+    
+    The key distinction between gestaltNode and baseGestaltNode is that gestaltNode is written
+    exactly the same way that a user of the library would write their own virtual nodes. All of the hidden
+    functionality is captured in baseGestaltNode. The intention is that this class gets subclassed by all
+    Gestalt virtual nodes.
+    """
+    pass
+    

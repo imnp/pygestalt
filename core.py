@@ -22,12 +22,13 @@ class actionObject(object):
     properties along with instance properties.
     """
     
-    #Explicitly define parameters here. These get set to real values when the actionObject is bound to a port by
+    #Explicitly define class parameters here. These get set to real values when the actionObject is bound to a port by
     #nodes.baseGestaltNode.bindPort()
     _port_ = None
     _inboundPacketFlag_ = None
     _outboundTemplate_ = None
     _inboundTemplate_ = None
+    _baseActionObject_ = None
     
     def __new__(cls, *args, **kwargs):
         """Intantiation routine for actionObject base class.
