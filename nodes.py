@@ -199,6 +199,69 @@ class gestaltNode(baseGestaltNode):
                                                      packets.unsignedInt('appValidity', 1)) #application validity byte, gets set to 170 if valid
         
         #Bootloader Command
-        self.bootCommandRequestPacket = packets.template('commandRequest',
-                                                         packets.unsignedInt('commandCode',1))
+        self.bootCommandRequestPacket = packets.template('bootCommandRequest',
+                                                         packets.unsignedInt('commandCode', 1))
+        
+        self.bootCommandResponsePacket = packets.template('bootCommandResponse',
+                                                          packets.unsignedInt('responseCode', 1),
+                                                          packets.unsignedInt('pageNumber', 2))
+        #Bootloader Write
+        self.bootWriteRequestPacket = packets.template('bootWriteRequest',
+                                                       packets.unsignedInt('commandCode', 1),
+                                                       packets.unsignedInt('pageNumber', 2),
+                                                       packets.pList('writeData', self.bootPageSize))
+        
+        self.bootWriteResponsePacket = packets.template('bootWriteResponse',
+                                                        packets.unsignedInt('responseCode', 1),
+                                                        packets.unsignedInt('pageNumber', 2))
+        #Bootloader Read
+        self.bootReadRequestPacket = packets.template('bootReadRequest',
+                                                      packets.unsignedInt('pageNumber',2))
+        
+        self.bootReadResponsePacket = packets.template('bootReadResponse',
+                                                       packets.pList('readData', self.bootPageSize))
+        
+        #Request URL
+        self.urlResponsePacket = packets.template('urlResponse',
+                                                  packets.pString('URL'))
+        
+        #Set Address
+        self.setAddressRequestPacket = packets.template('setAddressRequest',
+                                                   packets.pList('setAddress', 2))
+        
+        self.setAddressResponsePacket = packets.template('setAddressResponse',
+                                                    packets.pString('URL'))
+        
+    def initPorts(self):
+        """Bind ports to functions and packet templates."""
+        
+        #Node Status
+        self.bindPort(port = 1, outboundFunction = self.statusRequest, inboundTemplate = self.statusResponsePacket)
+        
+        #Bootloader Command
+        self.bindPort(port = 2, outboundFunction = self.bootCommandRequest, outboundTemplate = self.bootCommandRequestPacket,
+                      inboundTemplate = self.bootCommandResponsePacket)
+        
+        #Bootloader Write
+        self.bindPort(port = 3, outboundFunction = self.bootWriteRequest, outboundTemplate = self.bootWriteRequestPacket,
+                      inboundTemplate = self.bootWriteResponsePacket)
+        
+        #Bootloader Read
+        self.bindPort(port = 4, outboundFunction = self.bootReadRequest, outboundTemplate = self.bootReadRequestPacket,
+                      inboundTemplate = self.bootReadResponsePacket)
+        
+        #URL Request
+        self.bindPort(port = 5, outboundFunction = self.urlRequest, inboundTemplate = self.urlResponsePacket)
+        
+        #Set Address
+        self.bindPort(port = 6, outboundFunction = self.setAddressRequest, outboundTemplate = self.setAddressRequestPacket,
+                      inboundTemplate = self.setAddressResponsePacket)
+        
+        #Identify Node
+        self.bindPort(port = 7, outboundFunction = self.identifyRequest)
+        
+        #Reset Node
+        self.bindPort(port = 255, outboundFunction = self.resetRequest)
+        
+        
     

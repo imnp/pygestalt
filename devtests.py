@@ -74,8 +74,7 @@ print encodedGestaltPacket
 
 # # The code below tests whether actionObject classes are being copied
 
-myGestaltNode = nodes.baseGestaltNode()
+myGestaltNode = nodes.gestaltNode()
 myGestaltNode._init_()
 
-myGestaltNode.bindPort(5)
 print myGestaltNode.__dict__
