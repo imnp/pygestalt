@@ -3,6 +3,7 @@
 """Provides the central elements of the pyGestalt framework."""
 
 #--IMPORTS--
+import copy
 
 class actionObject(object):
     """A token that embodies the logic behind packet generation.
@@ -23,12 +24,13 @@ class actionObject(object):
     """
     
     #Explicitly define class parameters here. These get set to real values when the actionObject is bound to a port by
-    #nodes.baseGestaltNode.bindPort()
+    #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks due to the method resolution order.
     _port_ = None
     _inboundPacketFlag_ = None
     _outboundTemplate_ = None
     _inboundTemplate_ = None
     _baseActionObject_ = None
+    virtualNode = None
     
     def __new__(cls, *args, **kwargs):
         """Intantiation routine for actionObject base class.
@@ -54,7 +56,8 @@ class actionObject(object):
         
         Note that no arguments are provided because user-supplied arguments are handled strictly by the subclass's init() method.
         """
-        pass
+        self._outboundPacketDictionary_ = {}    #stores key:value pairs to be encoded by _encodeOutboundPacket_
+        self._inboundPacketDictionary_ = {} #stores key:value pairs decoded by _decodeAndSetInboundPacket_
         
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
         """actionObject subclass's initialization routine.
@@ -62,6 +65,74 @@ class actionObject(object):
         This should be overridden by the user-defined subclass."""
         pass
     
+    def setPacket(self, **kwargs):
+        """Updates the dictionary that will encode the actionObject's outgoing packet using the provided keyword arguments.
+        
+        **kwargs -- all of the key:value pairs to be encoded are provided as keyword arguments to the function.
+        """
+        self._outboundPacketDictionary_.update(kwargs)
+        return True
+    
+    def getPacket(self):
+        """Returns the decoded inbound packet, or None if no inbound packet has been received."""
+        if self._inboundPacketDictionary_ == {}:
+            return None
+        else:
+            return copy.copy(self._inboundPacketDictionary_)
+    
+    def _getEncodedOutboundPacket_(self):
+        """Internal function that encodes and returns the actionObject's outgoing packet dictionary using the outbound packet template."""
+        return self._outboundTemplate_.encode(self._outboundPacketDictionary_)
+    
+    def _decodeAndSetInboundPacket_(self, serializedPacket):
+        """Internal function that decodes and stores an inbound serialized packet using the inbound packet template.
+        
+        serializedPacket -- a packets.serializedPacket object containing a serial byte sequence that should be decoded and stored.
+        """
+        self._inboundPacketDictionary_ = self._inboundTemplate_.decode(serializedPacket)[0]    #decodes serializedPacket using _inboundTemplate_
+        return True
+    
+    def _synthetic_(self, toSyntheticNodeSerializedPacket):
+        """Internal function that encodes and decodes packets en-route to user-provided synthetic service routine to support operation without physical nodes attached.
+        
+        toSyntheticNodeSerializedPacket -- a serialized packet that is being rerouted to a synthetic service routine instead of out to a physical node.
+        
+        New to Gestalt 0.7 is a debug mode where synthetic physical nodes can be used in leu of real ones. If the user wants to support this, they
+        need to write a function called 'synthetic' that pretends to be a service routine on the physical node. The purpose of _synthetic_ is to
+        provide encode/decode services for the user-provided synthetic function.
+
+        This function will call synthetic with a decoded dictionary, and will return an encoded version of the reply.
+        """
+        decodedPacket = self._outboundTemplate_.decode(toSyntheticNodeSerializedPacket)[0] #decode the incoming serialized packet
+        replyDictionary = self.synthetic(**decodedPacket) #call synthetic using decoded packet dictionary as the keyword arguments.
+        return self._inboundTemplate_.encode(replyDictionary) #return the encoded reply from synthetic
+    
+    def synthetic(self, **kwargs):
+        """Default synthetic service routine function.
+        
+        **kwargs -- when rewritten by the user, these should be named parameters that the synthetic service routine accepts.
+        
+        This function should be replaced by the user, and simulates the physical node's service routine.
+        
+        Returns None if user did not provide a synthetic service routine, or if no reply should be sent.
+        Otherwise returns a dictionary of values to get encoded and sent back to the virtual node.
+        """
+        return None
+    
+    def transmitUntilReply(self, timeout = 0.2, attempts = 10):
+        """Persistently transmits until a reply is received from the node.
+        
+        timeout -- the time (in seconds) to wait for a reply between re-attempts
+        attempts -- the number of transmission attempts before giving up.
+        
+        This is an area in which to potentially improve Gestalt, by building in some functionality that
+        can identify and respond intelligently to when a node goes down.
+        """
+        
+        ###The following code should get replaced... just for fleshing out the synthetic functions for now!
+        self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
+        ### end bad code
+        return True
 
 #--- GENERIC ACTION OBJECTS ---
 class genericActionObject(actionObject):

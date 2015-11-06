@@ -9,6 +9,9 @@ import ast
 import datetime
 import itertools
 
+def notice(callingObject, noticeString):
+    print str(callingObject) + ": " + str(noticeString)
+
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.
     

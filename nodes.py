@@ -6,6 +6,7 @@
 #---- INCLUDES ----
 import threading
 from pygestalt import core, packets
+from pygestalt.utilities import notice
 
 
 class baseVirtualNode(object):
@@ -141,6 +142,9 @@ class baseGestaltNode(baseVirtualNode):
         outboundActionObjectClass._inboundTemplate_ = inboundTemplate #store inbound packet template
         inboundActionObjectClass._inboundTemplate_ = inboundTemplate
         
+        outboundActionObjectClass.virtualNode = self
+        inboundActionObjectClass.virtualNode = self
+        
         #UPDATE VIRUAL NODE PORT DICTIONARIES
         self._outboundPortTable_.update({outboundActionObjectClass:port})
         self._inboundPortTable_.update({port:inboundActionObjectClass})
@@ -263,5 +267,57 @@ class gestaltNode(baseGestaltNode):
         #Reset Node
         self.bindPort(port = 255, outboundFunction = self.resetRequest)
         
-        
+    # --- actionObjects ---
+    class statusRequest(core.actionObject):
+        """Checks whether node is in bootloader or application mode and whether the node application firmware is valid.""" 
+        def init(self):
+            """Initialization function for statusRequest.
+
+            Return Values:
+            status -- "B" for bootloader, "A" for application
+            appValidity -- True if application firmware is valid, False if app firmware isn't valid. This is determined
+                            by checking if the magic number returned by the node is equal to 170.
+            """
+            if self.transmitUntilReply():   #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                receivedData = self.getPacket()
+                status = receivedData['status']
+                appValid = (receivedData['appValidity'] == 170)
+                return status, appValid
+            else:
+                notice(self, "unable to check status")
+                return False, False     
     
+        def synthetic(self):
+            return {'status': 'A', 'appValidity': 170}  #until implement synthetic nodes, this is just a generic reply
+    
+    class bootCommandRequest(core.actionObject):
+        """Issues a bootloader commmand to the node."""
+        def init(self, command):
+            """Initialization function for bootCommandRequest.
+            
+            """
+            pass
+    
+    class bootWriteRequest(core.actionObject):
+        def init(self):
+            pass
+    
+    class bootReadRequest(core.actionObject):
+        def init(self):
+            pass
+    
+    class urlRequest(core.actionObject):
+        def init(self):
+            pass
+    
+    class setAddressRequest(core.actionObject):
+        def init(self):
+            pass
+    
+    class identifyRequest(core.actionObject):
+        def init(self):
+            pass
+    
+    class resetRequest(core.actionObject):
+        def init(self):
+            pass

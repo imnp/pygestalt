@@ -26,9 +26,9 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 # encodedPayloadPacket = payloadTestPacket.encode(payloadDict)
 # 
 # gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':encodedPayloadPacket}
-gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':[]}
-encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
-print encodedGestaltPacket
+# gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':[]}
+# encodedGestaltPacket = gestaltPacket.encode(gestaltDict)
+# print encodedGestaltPacket
 # myEncodedPacket = [72, 1, 0, 72, 25, 1, 4, 0, 252, 1, 128, 119, 119, 119, 46, 102, 97, 98, 117, 110, 105, 116, 46, 99, 111, 109, 203]
 # print gestaltPacket.validateChecksum('_checksum_', myEncodedPacket)
 # 
@@ -77,4 +77,4 @@ print encodedGestaltPacket
 myGestaltNode = nodes.gestaltNode()
 myGestaltNode._init_()
 
-print myGestaltNode.__dict__
+print myGestaltNode.statusRequest()
