@@ -62,6 +62,18 @@ class baseGestaltNode(baseVirtualNode):
         self._outboundPortTable_ = {}   #stores function:port pairs as assigned by bindPort
         self._inboundPortTable_ = {} #stores port:function pairs as assigned by bindPort
         
+        #-- Parse Optional Initialization Parameters --
+        if "name" in self._initKwargs_:
+            self._name_ = self._initKwargs_.pop("name")    #pop name from named arguments, and set as node name. This is used by utilities.notice
+        else:
+            self._name_ = None  #default value
+            
+        if "interface" in self._initKwargs_:
+            interface = self._initKwargs_.pop("interface")
+            #here need to handle different types of provided interfaces, for when node is generated from within a shell.
+            
+            
+        #-- Initialize Virtual Node Children--
         self._recursiveInit_(0, *self._initArgs_, **self._initKwargs_) #begin recursive initialization at a depth of 0.
     
     def init(self, *args, **kwargs):
@@ -284,7 +296,7 @@ class gestaltNode(baseGestaltNode):
                 appValid = (receivedData['appValidity'] == 170)
                 return status, appValid
             else:
-                notice(self, "unable to check status")
+                notice(self.virtualNode, "Unable to check status.")
                 return False, False     
     
         def synthetic(self):
@@ -295,8 +307,37 @@ class gestaltNode(baseGestaltNode):
         def init(self, command):
             """Initialization function for bootCommandRequest.
             
+            command -- 'startBootloader' will switch the node to its bootloader firmware (if availiable)
+                       'startApplication' will switch the node to its application firmware (if valid)
+                       
+            Returns True if successful, or False if unsuccessful.
             """
-            pass
+            
+            commandSet = {'startBootloader': 0, 'startApplication': 1}    #command options and corresponding firmware-defined values to send to node.
+            responseSet = {'bootloaderStarted':5, 'applicationStarted':9 }    #response options and corresponding firmware-defined values received from node.
+            if command in commandSet:   #provided command is valid
+                self.setPacket(commandCode = commandSet[command])
+                if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                    responseCode = self.getPacket()['responseCode'] #pull response code from packet
+                    if command == 'startBootloader' and responseCode == responseSet['bootloaderStarted']: #received valid reply to startBootloader command
+                        return True
+                    elif command == 'startAplication' and responseCode == responseSet['applicationStarted']: #received valid reply to startApplication command
+                        return True
+                    else:
+                        notice(self.virtualNode, "Received invalid response from node to bootloader command "+ command + ".")
+                        return False
+                else:
+                    notice(self.virualNode, "No response to bootloader command "+ command + ".")
+                    return False
+            else:
+                notice(self.virtualNode, "Bootloader command " + command + " not recognized.")
+                return False
+        
+        def synthetic(self, commandCode):
+            if commandCode == 0:
+                return {'responseCode': 5, 'pageNumber': 0}  #bootloader started, dummy page number provided
+            if commandCode == 1:
+                return {'responseCode': 9, 'pageNumber': 0}  #application started, dummy page number provided
     
     class bootWriteRequest(core.actionObject):
         def init(self):

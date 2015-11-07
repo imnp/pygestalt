@@ -24,9 +24,9 @@ class actionObject(object):
     """
     
     #Explicitly define class parameters here. These get set to real values when the actionObject is bound to a port by
-    #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks due to the method resolution order.
+    #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks that are superseded by child class attributes.
     _port_ = None
-    _inboundPacketFlag_ = None
+    _inboundPacketFlag_ = None  #Note that this flag is set dynamically, so need to be careful about which instance is monitoring it.
     _outboundTemplate_ = None
     _inboundTemplate_ = None
     _baseActionObject_ = None
@@ -119,10 +119,11 @@ class actionObject(object):
         """
         return None
     
-    def transmitUntilReply(self, timeout = 0.2, attempts = 10):
+    def transmitUntilReply(self, timeout = 0.2, mode = 'unicast', attempts = 10):
         """Persistently transmits until a reply is received from the node.
         
         timeout -- the time (in seconds) to wait for a reply between re-attempts
+        mode -- the transmission mode, either 'unicast' to direct at a single node, or 'multicast' to direct at all nodes
         attempts -- the number of transmission attempts before giving up.
         
         This is an area in which to potentially improve Gestalt, by building in some functionality that
@@ -131,8 +132,7 @@ class actionObject(object):
         
         ###The following code should get replaced... just for fleshing out the synthetic functions for now!
         self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
-        ### end bad code
-        return True
+        return True 
 
 #--- GENERIC ACTION OBJECTS ---
 class genericActionObject(actionObject):

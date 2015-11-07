@@ -10,7 +10,22 @@ import datetime
 import itertools
 
 def notice(callingObject, noticeString):
-    print str(callingObject) + ": " + str(noticeString)
+    """Prints a formatted notice in the terminal window that includes the name of the source.
+    
+    callingObject -- the instance object making the call
+    noticeString -- the message to be printed
+    
+    For now this function just prints to the terminal, but eventually it could publish to a browser-based interface etc...
+    """
+    if hasattr(callingObject, '_name_'):    #object has a _name_ attribute
+        name = getattr(callingObject, '_name_')
+        if name:    #name is not False (or None)
+            print "[" + name + "] " + str(noticeString)   #print "name: message"
+        else:   #name is False or None
+            print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
+    else:
+        print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
+            
 
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.
