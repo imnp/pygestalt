@@ -300,6 +300,7 @@ class gestaltNode(baseGestaltNode):
                 return False, False     
     
         def synthetic(self):
+            """Synthetic node service routine handler for statusRequest."""
             return {'status': 'A', 'appValidity': 170}  #until implement synthetic nodes, this is just a generic reply
     
     class bootCommandRequest(core.actionObject):
@@ -334,14 +335,38 @@ class gestaltNode(baseGestaltNode):
                 return False
         
         def synthetic(self, commandCode):
+            """Synthetic node service routine handler for bootCommandRequest."""
             if commandCode == 0:
                 return {'responseCode': 5, 'pageNumber': 0}  #bootloader started, dummy page number provided
             if commandCode == 1:
                 return {'responseCode': 9, 'pageNumber': 0}  #application started, dummy page number provided
     
     class bootWriteRequest(core.actionObject):
-        def init(self):
-            pass
+        """Instructs the bootloader to write a provided page of data to the node microcontroller's application code space."""
+        def init(self, pageNumber, data):
+            """Initialization function for bootWriteRequest
+            
+            pageNumber -- the memory address of the page to write
+            data -- a list of bytes to write to application code space
+            
+            Returns True if successful, False if unsuccessful.
+            """
+            self.setPacket(commandCode = 2, pageNumber = pageNumber, writeData = data)
+            if self.transmitUntilReply():  #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                returnPacket = self.getPacket()
+                if returnPacket['responseCode'] == 1:   #valid response code is hardcoded in the firmware
+                    return returnPacket['pageNumber']   #response is valid, return page number as provided by the physical node
+                else:   #response code didn't match
+                    notice(self.virtualNode, "Page write was not successful on physical node end.")
+                    return False
+            else:
+                notice(self.virtualNode, "No response received to page write request.")
+                return False
+        
+        def synthetic(self, commandCode, pageNumber, writeData):
+            if commandCode == 2:    #write page command
+                return {'responseCode': 1, 'pageNumber': pageNumber}    
+        
     
     class bootReadRequest(core.actionObject):
         def init(self):

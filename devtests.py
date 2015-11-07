@@ -77,4 +77,4 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
 myGestaltNode._init_()
 
-print myGestaltNode.bootCommandRequest('startBootloader')
+print myGestaltNode.bootWriteRequest(pageNumber = 6, data = range(128))
