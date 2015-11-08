@@ -119,6 +119,18 @@ class actionObject(object):
         """
         return None
     
+    def transmit(self, mode = 'unicast'):
+        """Transmits packet on the virtualNode's interface.
+        
+        mode -- the transmission mode, either 'unicast to direct at a single node, or 'multicast' to direct at all nodes.
+        
+        *Add description here as build out priority and channel access queues.
+        """
+        
+        ###The following code should get replaced... just for fleshing out the synthetic functions for now!
+        self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
+        return True        
+    
     def transmitUntilReply(self, timeout = 0.2, mode = 'unicast', attempts = 10):
         """Persistently transmits until a reply is received from the node.
         
@@ -129,10 +141,8 @@ class actionObject(object):
         This is an area in which to potentially improve Gestalt, by building in some functionality that
         can identify and respond intelligently to when a node goes down.
         """
-        
-        ###The following code should get replaced... just for fleshing out the synthetic functions for now!
-        self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
-        return True 
+        self.transmit(mode = mode)
+        return True
 
 #--- GENERIC ACTION OBJECTS ---
 class genericActionObject(actionObject):

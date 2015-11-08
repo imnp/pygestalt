@@ -25,7 +25,7 @@ def notice(callingObject, noticeString):
             print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
     else:
         print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
-            
+
 
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.

@@ -5,6 +5,7 @@
 
 #---- INCLUDES ----
 import threading
+import time
 from pygestalt import core, packets
 from pygestalt.utilities import notice
 
@@ -24,14 +25,12 @@ class baseVirtualNode(object):
 
     def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Dummy initializer function."""
-        print "baseVirtualNode init"
         pass
     
     def _recursiveOnLoad_(self, recursionDepth):
         """Dummy onLoad function.
         
         This is where the recursion terminates"""
-        print "baseVirtualNode onLoad"
         pass
 
 class baseGestaltNode(baseVirtualNode):
@@ -99,7 +98,6 @@ class baseGestaltNode(baseVirtualNode):
         
         Examples of this might be the crystal frequency, or an ADC reference voltage.
         """
-        print "baseGestaltNode init"
         pass
     
     def initPackets(self):
@@ -115,7 +113,6 @@ class baseGestaltNode(baseVirtualNode):
         
         An example might be setting some default parameters on the node.
         """
-        print "baseGestaltNode onLoad"
         pass
     
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
@@ -230,8 +227,8 @@ class gestaltNode(baseGestaltNode):
         #synthetic node parameters
         self.synApplicationMemorySize = 32768  #application memory size in bytes. Used for synthetic responses
         self.synApplicationMemory = [255 for bytePosition in range(self.synApplicationMemorySize)]  #used for synthetic bootloader program load
-        self.synBootVectorMode = 'B'    #'B' for bootloader, 'A' for application
-        print "gestaltNode init"
+        self.synNodeURL = "http://www.pygestalt.org/vn/gestaltNode.py"  #fake URL
+        self.synNodeAddress = 0 #synthetic node address. Note that eventually will need synthetic node address persistence.
     
     def initPackets(self):
         """Define packet templates."""
@@ -270,7 +267,7 @@ class gestaltNode(baseGestaltNode):
         
         #Set Address
         self.setAddressRequestPacket = packets.template('setAddressRequest',
-                                                   packets.pList('setAddress', 2))
+                                                   packets.unsignedInt('setAddress', 2))
         
         self.setAddressResponsePacket = packets.template('setAddressResponse',
                                                     packets.pString('URL'))
@@ -307,8 +304,12 @@ class gestaltNode(baseGestaltNode):
         self.bindPort(port = 255, outboundFunction = self.resetRequest)
         
     def onLoad(self):
-        print "gestaltNode onLoad"
-        pass
+        """Gets called once node has been fully loaded."""
+        if self.bootloaderSupport:
+            self.synBootVectorMode = 'B'    #'B' for bootloader
+        else:
+            self.synBootVectorMode = 'A'    #'A' for application
+    
     # --- actionObjects ---
     class statusRequest(core.actionObject):
         """Checks whether node is in bootloader or application mode and whether the node application firmware is valid.""" 
@@ -398,6 +399,8 @@ class gestaltNode(baseGestaltNode):
         def synthetic(self, commandCode, pageNumber, writeData):
             """Synthetic node service routine handler for bootWriteRequest."""
             if commandCode == 2:    #write page command
+                for offset, dataByte in enumerate(writeData):
+                    self.virtualNode.synApplicationMemory[pageNumber+offset] = dataByte
                 return {'responseCode': 1, 'pageNumber': pageNumber}
             else:
                 return False
@@ -419,21 +422,81 @@ class gestaltNode(baseGestaltNode):
                 return False
         
         def synthetic(self, pageNumber):
-            """Synthetic nod service routine handler for bootReadRequest."""
+            """Synthetic node service routine handler for bootReadRequest."""
+            readData = self.virtualNode.synApplicationMemory[pageNumber:pageNumber+self.virtualNode.bootPageSize]
+            return {'readData':readData}
         
     
     class urlRequest(core.actionObject):
+        """Requests URL to virtual node file"""
         def init(self):
-            pass
+            """Initialization function for urlRequest.
+            
+            Returns the URL string provided by the node.
+            """
+            if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                return self.getPacket()['URL']
+            else:
+                notice(self.virtualNode, 'No URL received.')
+                return False
+        
+        def synthetic(self):
+            """Synthetic node service routine handler for urlRequest."""
+            return {'URL': self.virtualNode.synNodeURL}     
     
     class setAddressRequest(core.actionObject):
-        def init(self):
-            pass
+        """Associates physical to virtual node by requesting that physically identified node assumes the provided address.
+        
+        One of the challenges of a networked system is identifying who's who. Gestalt solves this with the following algorithm:
+        1) A multicast identification request is sent to all nodes. The request contains a randomly generated address.
+        2) Upon receipt of the request, all nodes start blinking an LED.
+        3) The user presses the LED on the target node.
+        4) The target node assumes the provided address and replies with the URL to its virtual node file.
+        
+        In the case of "solo Gestalt" nodes, i.e. nodes that are not networked like a USB-connected Arduino, the firmware on the node
+        will automatically self-trigger the behavior of (4) upon receipt of the request.
+        """
+        def init(self, address):
+            """Initialization function for setAddressRequest.
+            
+            address -- the address to be assigned to the target node
+            
+            Returns URL from target node.
+            """
+            self.setPacket(setAddress = address)
+            if self.transmitUntilReply(mode = 'multicast', timeout = 15):   #transmit to all nodes with multiple attempts seperated by a 15 sec. timeout until reply is received
+                return self.getPacket()['URL']                              #Note that the prolonged timeout gives the user time to press a button on the target node.
+            else:
+                notice(self.virtualNode, 'PHYSICAL NODE WAS NOT IDENTIFIED')
+                return False
+        
+        def synthetic(self, setAddress):
+            """Synthetic node service routine handler for setAddressRequest."""
+            self.virtualNode.synNodeAddress = setAddress
+            return {'URL': self.virtualNode.synNodeURL}
+                
     
     class identifyRequest(core.actionObject):
+        """Requests that the node identify itself by blinking its LED."""
         def init(self):
-            pass
-    
+            """Initialization function for identifyRequest."""
+            self.transmit() #transmit request to node. No response is expected.
+            time.sleep(4) #roughly the time that the LED is on.
+            return True
+        
+        def synthetic(self):
+            """Synthetic node service routine handler for identifyRequest."""
+            notice(self.virtualNode, "SYNTHETIC node blinks its LED at you!")            
+        
     class resetRequest(core.actionObject):
+        """Requests that the node resets itself."""
         def init(self):
+            """Initialization function for resetRequest."""
+            self.transmit() #transmit reqeuest to node. No response is expected.
+            time.sleep(0.1) #give tiem for the watchdog timer to reset.
+            return True
+        
+        def synthetic(self):
+            """Synthetic node service routine handler for resetRequest."""
+            notice(self.virtualNode, "SYNTHETIC node has been reset")
             pass
