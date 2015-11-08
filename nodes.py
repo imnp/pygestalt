@@ -22,8 +22,16 @@ class baseVirtualNode(object):
         self._initArgs_ = args
         self._initKwargs_ = kwargs
 
-    def _recursiveInit_(self, _recursionDepth_, *args, **kwargs):
+    def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Dummy initializer function."""
+        print "baseVirtualNode init"
+        pass
+    
+    def _recursiveOnLoad_(self, recursionDepth):
+        """Dummy onLoad function.
+        
+        This is where the recursion terminates"""
+        print "baseVirtualNode onLoad"
         pass
 
 class baseGestaltNode(baseVirtualNode):
@@ -46,6 +54,15 @@ class baseGestaltNode(baseVirtualNode):
         if 'init' in baseClass.__dict__: baseClass.init(self, *args, **kwargs) #run user initialization routine with provided arguments
         if 'initPackets' in baseClass.__dict__: baseClass.initPackets(self) #initialize packets
         if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self) #initialize ports
+    
+    def _recursiveOnLoad_(self, recursionDepth):
+        """Recursively calls onLoad routine across parent virtual node classes.
+        
+        THIS FUNCTION IS ONLY CALLED INTERNALLY BY _init_, after calling _recursiveInit_
+        """
+        baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
+        parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
+        parentClass._recursiveOnLoad_(self, recursionDepth + 1) #recursively calls onLoad using parent class        
         if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self) #run after initialization is complete
         
     def _init_(self):
@@ -75,12 +92,14 @@ class baseGestaltNode(baseVirtualNode):
             
         #-- Initialize Virtual Node Children--
         self._recursiveInit_(0, *self._initArgs_, **self._initKwargs_) #begin recursive initialization at a depth of 0.
+        self._recursiveOnLoad_(0)   #begin recursive onLoad
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
         
         Examples of this might be the crystal frequency, or an ADC reference voltage.
         """
+        print "baseGestaltNode init"
         pass
     
     def initPackets(self):
@@ -96,6 +115,7 @@ class baseGestaltNode(baseVirtualNode):
         
         An example might be setting some default parameters on the node.
         """
+        print "baseGestaltNode onLoad"
         pass
     
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
@@ -205,6 +225,13 @@ class gestaltNode(baseGestaltNode):
     def init(self):
         """Initialiation routine for gestalt node."""
         self.bootPageSize = 128     #bootloader page size in bytes
+        self.bootloaderSupport = True   #default is that node supports a bootloader. For arduino-based nodes this should be set to false by the child node.
+    
+        #synthetic node parameters
+        self.synApplicationMemorySize = 32768  #application memory size in bytes. Used for synthetic responses
+        self.synApplicationMemory = [255 for bytePosition in range(self.synApplicationMemorySize)]  #used for synthetic bootloader program load
+        self.synBootVectorMode = 'B'    #'B' for bootloader, 'A' for application
+        print "gestaltNode init"
     
     def initPackets(self):
         """Define packet templates."""
@@ -279,6 +306,9 @@ class gestaltNode(baseGestaltNode):
         #Reset Node
         self.bindPort(port = 255, outboundFunction = self.resetRequest)
         
+    def onLoad(self):
+        print "gestaltNode onLoad"
+        pass
     # --- actionObjects ---
     class statusRequest(core.actionObject):
         """Checks whether node is in bootloader or application mode and whether the node application firmware is valid.""" 
@@ -301,7 +331,7 @@ class gestaltNode(baseGestaltNode):
     
         def synthetic(self):
             """Synthetic node service routine handler for statusRequest."""
-            return {'status': 'A', 'appValidity': 170}  #until implement synthetic nodes, this is just a generic reply
+            return {'status': self.virtualNode.synBootVectorMode, 'appValidity': 170}  #until implement synthetic nodes, this is just a generic reply
     
     class bootCommandRequest(core.actionObject):
         """Issues a bootloader commmand to the node."""
@@ -338,8 +368,10 @@ class gestaltNode(baseGestaltNode):
             """Synthetic node service routine handler for bootCommandRequest."""
             if commandCode == 0:
                 return {'responseCode': 5, 'pageNumber': 0}  #bootloader started, dummy page number provided
-            if commandCode == 1:
+            elif commandCode == 1:
                 return {'responseCode': 9, 'pageNumber': 0}  #application started, dummy page number provided
+            else:
+                return False
     
     class bootWriteRequest(core.actionObject):
         """Instructs the bootloader to write a provided page of data to the node microcontroller's application code space."""
@@ -364,13 +396,31 @@ class gestaltNode(baseGestaltNode):
                 return False
         
         def synthetic(self, commandCode, pageNumber, writeData):
+            """Synthetic node service routine handler for bootWriteRequest."""
             if commandCode == 2:    #write page command
-                return {'responseCode': 1, 'pageNumber': pageNumber}    
-        
-    
+                return {'responseCode': 1, 'pageNumber': pageNumber}
+            else:
+                return False
+
     class bootReadRequest(core.actionObject):
-        def init(self):
-            pass
+        """Reads a page from the node's microcontroller application code memory."""
+        def init(self, pageNumber):
+            """Initialization function for bootReadRequest.
+            
+            pageNumber -- the memory address location from which to read the page.
+            
+            Returns a list containing the page data if successful, or False if not.
+            """
+            self.setPacket(pageNumber = pageNumber)
+            if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                return self.getPacket()['readData'] #return memory page
+            else:
+                notice(self.virtualMachine, "No response received to page write request.")
+                return False
+        
+        def synthetic(self, pageNumber):
+            """Synthetic nod service routine handler for bootReadRequest."""
+        
     
     class urlRequest(core.actionObject):
         def init(self):
