@@ -6,6 +6,7 @@
 #---- INCLUDES ----
 import threading
 import time
+import imp, os, urllib  #for importing files
 from pygestalt import core, packets
 from pygestalt.utilities import notice
 
@@ -378,8 +379,10 @@ class gestaltNode(baseGestaltNode):
         def synthetic(self, commandCode):
             """Synthetic node service routine handler for bootCommandRequest."""
             if commandCode == 0:
+                self.synBootVectorMode = 'B'
                 return {'responseCode': 5, 'pageNumber': 0}  #bootloader started, dummy page number provided
             elif commandCode == 1:
+                self.synBootVectorMode = 'A'
                 return {'responseCode': 9, 'pageNumber': 0}  #application started, dummy page number provided
             else:
                 return False
@@ -559,57 +562,119 @@ class nodeShell(object):
         module -- a module from which to load the virtual node
         
         NOTE: The shell by definition must pass along function calls to the node. Therefore any attributes of the shell will appear to belong to the node.
-        For this reason, all shell attributes are carefully made unique with both underscores and a shell_ prefix.
+        For this reason, all shell attributes are underscored.
         """
         
         #Extract parameters from keyword arguments.
         if "filename" in kwargs:
-            self._shell_sourceFilename_ = kwargs.pop("filename")      #NOTE: all shell attributes should be underscored with shell_ prefix according to note above.
+            self._sourceFilename_ = kwargs.pop("filename")      #NOTE: all shell attributes should be underscored according to note above.
         else:
-            self._shell_sourceFilename_ = None
+            self._sourceFilename_ = None
         
         if "URL" in kwargs:
-            self._shell_sourceURL_ = kwargs.pop("URL")
+            self._sourceURL_ = kwargs.pop("URL")
         else:
-            self._shell_sourceURL_ = None
+            self._sourceURL_ = None
         
         if "module" in kwargs:
-            self._shell_sourceModule_ = kwargs.pop("module")
+            self._sourceModule_ = kwargs.pop("module")
         else:
-            self._shell_sourceModule_ = None
+            self._sourceModule_ = None
         
+        if "name" in kwargs:    #assume temporary name until node is loaded, to use by utilities.notice if load failure occurs.
+            self._name_ = kwargs["name"]
+            
         #Add shell self-reference to kwargs passed along to node
         kwargs.update({"_shell_":self})
         
         #Define shell flags
-        self._shell_nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
+        self._nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
                                         #Used to prevent the virtual node from cyclically reloading itself over and over if for some reason it is of the
                                         #gestaltNode type (and not a user-created subclass).
         
-        if self._shell_sourceFilename_: self._shell_loadNodeFromFile_() #load from provided filename
-        elif self._shell_sourceURL_: self._shell_loadNodeFromURL_() #load from provided URL
-        elif self._shell_sourceModule: self._shell_loadNodeFromModule_() #load from provided module
-        else: self._shell_virtualNode_ = False #unable to load node. Let the subclass handle that.
+        if self._sourceFilename_: self._loadNodeFromFile_(self._sourceFilename_, args, kwargs) #load from provided filename
+        elif self._sourceURL_: self._loadNodeFromURL_(self._sourceURL_, args, kwargs) #load from provided URL
+        elif self._sourceModule_: self._loadNodeFromModule_(self._sourceModule_, args, kwargs) #load from provided module
+        else: self._virtualNode_ = False #No source provided to load node. Let the subclass handle that.
         
-        self._shell_init_(self, *args, **kwargs)    #call subclass's init method with provided arguments
+        self._shellInit_(self, *args, **kwargs)    #call subclass's init method with provided arguments
+
+
+    def _setNodeInShell_(self, virtualNode, loadedFlag = True):
+        """Performs a sequence of steps to load a node into the shell.
+        
+        virtualNode -- the node to load into the shell
+        loadedFlag -- if True, self._nodeLoaded_ is set to true, indicating that a non-default node resides in the shell.
+        """
+        self._virtualNode_ = virtualNode    #store reference to virtual node
+        self._nodeLoaded_ = loadedFlag
+        if '_name_' in self.__dict__:   #removes the shell's temporary name, so that the attribute request maps onto the node.
+            self.__dict__.pop('_name_')
+        
+    def _loadNodeFromFile_(self, filename, args = [], kwargs = {}):
+        """Loads a node into the shell from a provided file."""
+        try:
+            virtualNode = imp.load_source('', filename).virtualNode(*args, **kwargs)    #instantiate virtual node from file
+            self._setNodeInShell_(virtualNode, loadedFlag = True)   #set the node into the shell
+            return True
+        except IOError, error:
+            notice(self, "Can not load virtual node from file " + str(filename))
+            notice(self, "Error: " + str(error))
+            return False
+            
+    def _loadNodeFromURL_(self, URL, args = [], kwargs = {}):
+        """Loads a node into the shell from a provided URL.
+        
+        Loading follows the following algorithm:
+        1) The file pointed to by the URL is downloaded and stored in a temporary file.
+        2) We attempt to load a virtualNode from the file
+        3) If successful, the file is re-written to its original filename
+        4) If not successful, attempt to load the file from the local directory
+        
+        The reason for only writing to the original filename after a successful load is to prevent overwriting a good virtual node
+        file with a 404 reply or some such garbage from a server.
+        """
+        try:
+            vnFilename = os.path.basename(URL)
+            urllib.urlretrieve(URL, "temporaryURLNode.py")  #retrieve file from URL
+            if self._loadNodeFromFile_("temporaryURLNode.py", args, kwargs):    #try to load node from temporary file
+                #insert file copy logic here now that file has been validated
+                return True
+            else: 
+                notice(self, "File dowloaded from URL does not appear to contain a valid virtual node.")
+                return False  #error message will be generated by _loadNodeFromFile_
+        except IOError, error:
+            notice(self, "Could not load " + str(vnFilename) + " from " + URL)
+            notice(self, "Error: " + str(error))
+            notice(self, "Attempting to load virtual node from the local directory...")
+            return self._loadNodeFromFile_(vnFilename, args, kwargs)
     
-    def _shell_init_(self, *args, **kwargs):
+    def _loadNodeFromModule_(self, module, args = [], kwargs = {}):
+        """Loads a node into the shell from a provided module.
+        
+        Note that the class itself should be provided, NOT a class instance.
+        """
+        try:
+            if hasattr(module, 'virtualNode'):  #module has a top-level virtualNode class
+                self._setNodeInShell_(module.virtualNode(*args, **kwargs)) #instantiate and set into shell
+            else: #assume that module is the virtualNode class
+                self._setNodeInShell_(module(*args, **kwargs)) #attempt to insantiate and set into shell
+                #maybe should check the type before doing this.
+        except AttributeError, error:
+            notice(self, "Unable to load virtual node from module")
+            notice(self, "Error: " + str(error))
+    
+    def __getattr__(self, attribute):
+        """Forwards any unsupported calls from the shell onto the node.
+        
+        This function is the crux of the shell. All it does is pass along calls to the virtualNode, which is what
+        allows the virtualNodes to be swapped while maintaining external references.
+        """
+    
+    def _shellInit_(self, *args, **kwargs):
         """Dummy init function for shell.
         
         This function should be overridden by the child nodes."""
         pass
     
-    def _shell_loadNodeFromFile_(self):
-        """Loads a node into the shell from a provided file."""
-        pass
-    
-    def _shell_loadNodeFromURL_(self):
-        """Loads a node into the shell from a provided URL."""
-        pass
-    
-    def _shell_loadNodeFromModule_(self):
-        """Loads a node into the shell from a provided module."""
-        pass
-        
-        
         
