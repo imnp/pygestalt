@@ -9,19 +9,14 @@ import time
 from pygestalt import core, packets
 from pygestalt.utilities import notice
 
-
 class baseVirtualNode(object):
     """Base class for all virtual nodes"""
     
     def __init__(self, *args, **kwargs):
-        """Initializer for all virtual nodes.
+        """Default initializer for all virtual nodes.
         
-        Because of the indirect way in which nodes are loaded, the arguments passed to the node
-        on instantiation are stored by this routine, and then passed to additional initialization
-        functions (_init_ for gestalt nodes) later after the node has been set into the node shell.
+        This should be overridden.
         """
-        self._initArgs_ = args
-        self._initKwargs_ = kwargs
 
     def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Dummy initializer function."""
@@ -35,7 +30,45 @@ class baseVirtualNode(object):
 
 class baseGestaltNode(baseVirtualNode):
     """Base class for Gestalt nodes."""
-    
+
+    def __init__(self, *args, **kwargs):
+        """Initializes Gestalt Node.
+        
+        Initialization occurs by calling a sequence of specialized initialization functions. In order to
+        support inheritance, and to make sure that all of the inherited functions are called, the parent
+        class initialization functions must be called recursively. This function is the entry point into
+        the process and starts at a recursion depth of 0.
+        
+        PARAMETERS PULLED FROM KEYWORD ARGUMENTS (and not passed along to child classes):
+        name -- the name of the node
+        interface -- the interface to use for communication
+        _shell_ -- if the node is set within a shell, the shell object passes along a self-reference here
+        """
+        
+        self._outboundPortTable_ = {}   #stores function:port pairs as assigned by bindPort
+        self._inboundPortTable_ = {} #stores port:function pairs as assigned by bindPort
+        
+        #-- Parse Optional Initialization Parameters --
+        if "name" in kwargs:
+            self._name_ = kwargs.pop("name")    #pop name from named arguments, and set as node name. This is used by utilities.notice and for persistence.
+        else:
+            self._name_ = None  #default value
+            
+        if "interface" in kwargs:
+            self._interface_ = kwargs.pop("interface")      #the interface on which the node will communicate
+        else:
+            self._interface_ = None
+        
+        if "_shell_" in kwargs:
+            self._shell_ = kwargs.pop("_shell_")
+        else:
+            self._shell_ = None
+            
+        #-- Initialize Virtual Node Children--
+        self._recursiveInit_(0, *args, **kwargs) #begin recursive initialization at a depth of 0.
+        self._recursiveOnLoad_(0)   #begin recursive onLoad
+            
+            
     def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Recursively initializes Gestalt node.
         
@@ -63,35 +96,6 @@ class baseGestaltNode(baseVirtualNode):
         parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
         parentClass._recursiveOnLoad_(self, recursionDepth + 1) #recursively calls onLoad using parent class        
         if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self) #run after initialization is complete
-        
-    def _init_(self):
-        """Initializes Gestalt Node.
-        
-        Initialization occurs by calling a sequence of specialized initialization functions. In order to
-        support inheritance, and to make sure that all of the inherited functions are called, the parent
-        class initialization functions must be called recursively. This function is the entry point into
-        the process and starts at a recursion depth of 0.
-        
-        Note that _initArgs_ and _initKwargs_ are the arguments provided to the virtual node when it was
-        first instantiated. They are stored by the baseVirtualNode.
-        """
-        self._outboundPortTable_ = {}   #stores function:port pairs as assigned by bindPort
-        self._inboundPortTable_ = {} #stores port:function pairs as assigned by bindPort
-        
-        #-- Parse Optional Initialization Parameters --
-        if "name" in self._initKwargs_:
-            self._name_ = self._initKwargs_.pop("name")    #pop name from named arguments, and set as node name. This is used by utilities.notice
-        else:
-            self._name_ = None  #default value
-            
-        if "interface" in self._initKwargs_:
-            interface = self._initKwargs_.pop("interface")
-            #here need to handle different types of provided interfaces, for when node is generated from within a shell.
-            
-            
-        #-- Initialize Virtual Node Children--
-        self._recursiveInit_(0, *self._initArgs_, **self._initKwargs_) #begin recursive initialization at a depth of 0.
-        self._recursiveOnLoad_(0)   #begin recursive onLoad
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
@@ -519,3 +523,93 @@ class gestaltNode(baseGestaltNode):
             """Synthetic node service routine handler for resetRequest."""
             notice(self.virtualNode, "SYNTHETIC node has been reset")
             pass
+
+class nodeShell(object):
+    """A virtual node container to support hot-swapping virtual nodes while maintaining external references.
+    
+    One of the nice features of Gestalt is the ability to dynamically load virtual nodes from a URL that is returned
+    by the physical node firmware. This enables the creator of the physical node to publish the matching virtual node
+    online, and means that the user doesn't need to keep track of a bunch of virtual node files. In reality these
+    should maybe also get stored on github or something like that!
+    
+    Note that the node shell has changed significantly from Gestalt v0.6. All of the machinery to acquire a URL from
+    the physical node has been moved to the gestalt interface for the sake of clarity. This makes the node shell much
+    simpler and independent from the under-the-hood functioning of the nodes themselves. Another change is that
+    node address persistence is handled at the interface level (although a parameter may be provided by the user
+    directly to the virtual node for cases where the interface is auto-generated).
+    """
+    def __init__(self, *args, **kwargs):
+        """Initialization function for nodeShell.
+        
+        The node shell's behavior on instantiation varies depending on whether certain keyword arguments are provided.
+        If a valid source is given (i.e. a URL, filename, or module name), the virtual node will be loaded directly
+        and will not do the song-and-dance of trying to reload the virtual node after talking to the physical node.
+        If no arguments are provided, the behavior of the shell will vary depending on the subclass. As an overview,
+        four different types of subclasses are expected:
+        ->Solo/Independent: arbitrary interface/ arbitrary protocol
+        ->Solo/Gestalt: arbitrary interface/ gestalt protocol
+        ->Networked/Gestalt: networked gestalt interface/ gestalt protocol
+        ->Managed/Gestalt: hardware synchronized gestalt network/ gestalt protocol
+        
+        To allow these subclasses the opportunity to have different behavior, an _shell_init_ function is called last.
+        
+        PARAMETERS PULLED FROM KEYWORD ARGUMENTS (and not passed along to child classes):
+        filename -- a filename from which to load the virtual node
+        URL -- a URL from which to load the virtual node
+        module -- a module from which to load the virtual node
+        
+        NOTE: The shell by definition must pass along function calls to the node. Therefore any attributes of the shell will appear to belong to the node.
+        For this reason, all shell attributes are carefully made unique with both underscores and a shell_ prefix.
+        """
+        
+        #Extract parameters from keyword arguments.
+        if "filename" in kwargs:
+            self._shell_sourceFilename_ = kwargs.pop("filename")      #NOTE: all shell attributes should be underscored with shell_ prefix according to note above.
+        else:
+            self._shell_sourceFilename_ = None
+        
+        if "URL" in kwargs:
+            self._shell_sourceURL_ = kwargs.pop("URL")
+        else:
+            self._shell_sourceURL_ = None
+        
+        if "module" in kwargs:
+            self._shell_sourceModule_ = kwargs.pop("module")
+        else:
+            self._shell_sourceModule_ = None
+        
+        #Add shell self-reference to kwargs passed along to node
+        kwargs.update({"_shell_":self})
+        
+        #Define shell flags
+        self._shell_nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
+                                        #Used to prevent the virtual node from cyclically reloading itself over and over if for some reason it is of the
+                                        #gestaltNode type (and not a user-created subclass).
+        
+        if self._shell_sourceFilename_: self._shell_loadNodeFromFile_() #load from provided filename
+        elif self._shell_sourceURL_: self._shell_loadNodeFromURL_() #load from provided URL
+        elif self._shell_sourceModule: self._shell_loadNodeFromModule_() #load from provided module
+        else: self._shell_virtualNode_ = False #unable to load node. Let the subclass handle that.
+        
+        self._shell_init_(self, *args, **kwargs)    #call subclass's init method with provided arguments
+    
+    def _shell_init_(self, *args, **kwargs):
+        """Dummy init function for shell.
+        
+        This function should be overridden by the child nodes."""
+        pass
+    
+    def _shell_loadNodeFromFile_(self):
+        """Loads a node into the shell from a provided file."""
+        pass
+    
+    def _shell_loadNodeFromURL_(self):
+        """Loads a node into the shell from a provided URL."""
+        pass
+    
+    def _shell_loadNodeFromModule_(self):
+        """Loads a node into the shell from a provided module."""
+        pass
+        
+        
+        
