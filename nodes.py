@@ -300,8 +300,12 @@ class gestaltNode(baseGestaltNode):
         #Identify Node
         self.bindPort(port = 7, outboundFunction = self.identifyRequest)
         
+        #Synchronization Packet
+        self.bindPort(port = 8, outboundFunction = self.syncRequest)
+        
         #Reset Node
         self.bindPort(port = 255, outboundFunction = self.resetRequest)
+        
         
     def onLoad(self):
         """Gets called once node has been fully loaded."""
@@ -309,6 +313,7 @@ class gestaltNode(baseGestaltNode):
             self.synBootVectorMode = 'B'    #'B' for bootloader
         else:
             self.synBootVectorMode = 'A'    #'A' for application
+    
     
     # --- actionObjects ---
     class statusRequest(core.actionObject):
@@ -333,6 +338,7 @@ class gestaltNode(baseGestaltNode):
         def synthetic(self):
             """Synthetic node service routine handler for statusRequest."""
             return {'status': self.virtualNode.synBootVectorMode, 'appValidity': 170}  #until implement synthetic nodes, this is just a generic reply
+    
     
     class bootCommandRequest(core.actionObject):
         """Issues a bootloader commmand to the node."""
@@ -374,6 +380,7 @@ class gestaltNode(baseGestaltNode):
             else:
                 return False
     
+    
     class bootWriteRequest(core.actionObject):
         """Instructs the bootloader to write a provided page of data to the node microcontroller's application code space."""
         def init(self, pageNumber, data):
@@ -404,6 +411,7 @@ class gestaltNode(baseGestaltNode):
                 return {'responseCode': 1, 'pageNumber': pageNumber}
             else:
                 return False
+
 
     class bootReadRequest(core.actionObject):
         """Reads a page from the node's microcontroller application code memory."""
@@ -443,6 +451,7 @@ class gestaltNode(baseGestaltNode):
         def synthetic(self):
             """Synthetic node service routine handler for urlRequest."""
             return {'URL': self.virtualNode.synNodeURL}     
+    
     
     class setAddressRequest(core.actionObject):
         """Associates physical to virtual node by requesting that physically identified node assumes the provided address.
@@ -487,6 +496,16 @@ class gestaltNode(baseGestaltNode):
         def synthetic(self):
             """Synthetic node service routine handler for identifyRequest."""
             notice(self.virtualNode, "SYNTHETIC node blinks its LED at you!")            
+
+    class syncRequest(core.actionObject):
+        """Initiates synchronized behavior across multiple networked nodes."""
+        def onChannelAccess(self):
+            """Transmits a packet when granted access to the interface channel."""
+            self.transmit(mode = 'multicast')   #transmit multicast, no reply expected.
+        
+        def synthetic(self):
+            """Synthetic node service routine handler for syncRequest."""
+            notice(self.virtualNode, "SYNTHETIC syncronization packet transmitted.")
         
     class resetRequest(core.actionObject):
         """Requests that the node resets itself."""
