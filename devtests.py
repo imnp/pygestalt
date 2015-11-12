@@ -74,9 +74,9 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 
 # # The code below tests whether actionObject classes are being copied
 
-myGestaltWrapper = nodes.nodeShell(name = "myGestaltWrapper", filename = "testNode.py")
+myGestaltNode = nodes.nodeShell(name = "myGestaltNode", filename = "testNode.py")
 
-myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
+# myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
 
 # print myGestaltNode.statusRequest()
 # 
@@ -87,6 +87,7 @@ print myGestaltNode.setAddressRequest(1025)
 print myGestaltNode.synNodeAddress
 # print myGestaltNode.identifyRequest()
 print myGestaltNode.resetRequest()
+print myGestaltNode
 # class myGestaltNode(nodes.gestaltNode):
 #     def init(self):
 #         print "myGestaltNode init"

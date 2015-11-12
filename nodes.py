@@ -7,6 +7,7 @@
 import threading
 import time
 import imp, os, urllib  #for importing files
+import copy
 from pygestalt import core, packets
 from pygestalt.utilities import notice
 
@@ -21,6 +22,10 @@ class baseVirtualNode(object):
 
     def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Dummy initializer function."""
+        pass
+    
+    def _recursiveInitLast_(self, recursionDepth):
+        """Dummy final initialization function."""
         pass
     
     def _recursiveOnLoad_(self, recursionDepth):
@@ -50,6 +55,9 @@ class baseGestaltNode(baseVirtualNode):
         self._inboundPortTable_ = {} #stores port:function pairs as assigned by bindPort
         
         #-- Parse Optional Initialization Parameters --
+        originalArgs = copy.copy(args)  #store original arguments for _updateVirtualNode_
+        originalKwargs = copy.copy(kwargs)
+        
         if "name" in kwargs:
             self._name_ = kwargs.pop("name")    #pop name from named arguments, and set as node name. This is used by utilities.notice and for persistence.
         else:
@@ -65,21 +73,30 @@ class baseGestaltNode(baseVirtualNode):
         else:
             self._shell_ = None
             
-        #-- Initialize Virtual Node Children--
+        #-- Initialization--
         self._recursiveInit_(0, *args, **kwargs) #begin recursive initialization at a depth of 0.
-        self._recursiveOnLoad_(0)   #begin recursive onLoad
+        self._recursiveInitLast_(0) #begin recursive initLast
+        self._initInterface_() #Initializes node into a gestalt interface
+        if not self._updateVirtualNode_(originalArgs, originalKwargs):  #Updates the virtual node object contained within _shell_ based on URL received from node
+            self._recursiveOnLoad_(0)   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
+        else: #returned True: this virtual node instance has been supplanted
+            pass    #last instruction that will be called on this particular virtual node instance
             
             
     def _recursiveInit_(self, recursionDepth, *args, **kwargs):
         """Recursively initializes Gestalt node.
         
-        THIS FUNCTION IS ONLY CALLED INTERNALLY BY _init_
+        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__
         Initialization occurs in the following steps:
         1) parent class initialization: a call to parentClass._recursiveInit_
         2) init: user initialization routine for defining optional constants etc. that are specific to the node
         3) packets: packet templates are defined here
         4) ports: actionObjects and packets are bound to ports
-        5) onLoad: anything that needs to get initialized with the ability to communicate to the node.
+        
+        The following final steps are done in individual recursive batches, so each will run on all subclasses before the next is called.
+        5) last: any actions that must be performed after all subclasses have had a chance to initialize, like setting the node into the interface.
+        --- node is bound to interface here ---
+        6) onLoad: anything that needs to get initialized with the ability to communicate to the node.
         """
         baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
         parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
@@ -88,10 +105,20 @@ class baseGestaltNode(baseVirtualNode):
         if 'initPackets' in baseClass.__dict__: baseClass.initPackets(self) #initialize packets
         if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self) #initialize ports
     
+    def _recursiveInitLast_(self, recursionDepth):
+        """Recursively calls initLast routine across parent virtual node classes.
+        
+        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__, after calling _recursiveInit_
+        """
+        baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
+        parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
+        parentClass._recursiveInitLast_(self, recursionDepth + 1) #recursively calls onLoad using parent class        
+        if 'initLast' in baseClass.__dict__: baseClass.initLast(self) #run after initialization is complete        
+    
     def _recursiveOnLoad_(self, recursionDepth):
         """Recursively calls onLoad routine across parent virtual node classes.
         
-        THIS FUNCTION IS ONLY CALLED INTERNALLY BY _init_, after calling _recursiveInit_
+        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__, after calling _recursiveInitLast_
         """
         baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
         parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
@@ -113,12 +140,66 @@ class baseGestaltNode(baseVirtualNode):
         """Bind actionObjects and packets to ports."""
         pass
     
+    def initLast(self):
+        """Runs any initialization functions that must be performed after all node subclasses classes have undergone standard initialization steps."""
+        pass
+    
     def onLoad(self):
         """Run any initialization functions that must communicate with the physical node.
         
         An example might be setting some default parameters on the node.
         """
         pass
+    
+    def _initInterface_(self):
+        """Initializes the node in the context of an interface by which it will communicate with the outside world."""
+        pass
+
+    def _updateVirtualNode_(self, args = [], kwargs = {}):
+        """Attempts to replace virtual node instance residing inside _shell_ (e.g. self) with an updated version as referenced by the physical node's URL.
+        
+        This is perhaps one of the weirder initialiation steps of the Gestalt node. As has been discussed previously, when a virtual node is first initialized and
+        before it has communicated with its physical node, a default base class (nodes.gestaltNode) is used. The base class contains just the functionality
+        to retreive a URL from the physical node that points to a feature-complete virtual node matching the physical node. _updateVirtualNode_ handles
+        retrieving the URL and attempting to instantiate a new virtual node using the referenced file. If successful, this function will replace the base
+        virtual node with the retrieved version. All of this is predicated on the node having been instantiated within a shell, and without a source being
+        explicitly provided. If no shell is provided it is assumed that the feature-complete virtual node has been directly imported. Keep in mind that the
+        present function is part of the base class and will run multiple times.
+        
+        Returns True if the node has successfully been replaced, or False if not.
+        """ 
+        #run some basic checks first
+        if self._shell_ == None:    #no shell has been provided
+            print "No Shell Provided"
+            return False
+
+        if self._shell_._nodeLoaded_:   #a non-default node is already loaded into the shell.
+            print "Node already loaded"
+            return False
+        
+        nodeStatus, appValid = self.statusRequest() #get current status of node
+        
+        if not appValid:    #application is not valid
+            notice(self, "Application firmware is invalid!")
+            return False
+        
+        if nodeStatus == 'B':   #in bootloader mode, attempt to switch to application mode
+            if not self.runApplication():   #cannot switch to application mode
+                notice(self, "Unable to switch node to application mode.")
+                notice(self, "Running in bootloader mode!")
+                return False
+
+        nodeURL = self.urlRequest() #get node URL
+        print nodeURL
+        
+        self._shell_._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
+        if not self._shell_._loadNodeFromURL_(nodeURL, args, kwargs):   #unable to load node
+            self._shell_._revertNodeLoaded()
+            return False
+        else:
+            return True
+                
+                        
     
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
         """Attaches actionObject classes and templates to a communication port, and initializes relevant parameters.
@@ -312,14 +393,71 @@ class gestaltNode(baseGestaltNode):
         self.bindPort(port = 255, outboundFunction = self.resetRequest)
         
         
-    def onLoad(self):
-        """Gets called once node has been fully loaded."""
+    def initLast(self):
+        """Gets called once node has been initialized."""
         if self.bootloaderSupport:
             self.synBootVectorMode = 'B'    #'B' for bootloader
         else:
             self.synBootVectorMode = 'A'    #'A' for application
     
+    # --- Utility Functions ---
+    def loadProgram(self, filename):
+        '''Loads a program into a Gestalt Node via the built-in Gestalt bootloader.'''
+        #initialize hex parser
+        parser = utilities.intelHexParser()    #Intel Hex Format Parser Object
+        parser.openHexFile(filename)
+        parser.loadHexFile()
+        pages = parser.returnPages(self.bootPageSize)
+        #reset node if necessary to switch to bootloader mode
+        nodeStatus, appValid = self.statusRequest()            
+        if nodeStatus == 'A':    #currently in application, need to go to bootloader
+            self.resetRequest()    #attempt to reset node
+            nodeStatus, appValid = self.statusRequest()
+            if nodeStatus != 'B':
+                notice(self, "ERROR IN BOOTLOADER: CANNOT RESET NODE")
+                return False
+        #initialize bootloader
+        if self.initBootload(): notice(self, "BOOTLOADER INITIALIZED!")
+        #write hex file to node
+        for page in pages:
+            pageData = [addressBytePair[1] for addressBytePair in page]
+            pageNumber = self.bootWriteRequest(0, pageData)    #send page to bootloader
+            if pageNumber != page[0][0]:
+                notice(self, "Error in Bootloader: PAGE MISMATCH: SENT PAGE " + str(page[0][0]) + " AND NODE REPORTED PAGE " + str(pageNumber))
+                notice(self, "ABORTING PROGRAM LOAD")
+                return False
+            notice(self, "WROTE PAGE "+ str(pageNumber))# + ": " + str(pageData)
+        #verify hex file from node
+        for page in pages:
+            pageData = [addressBytePair[1] for addressBytePair in page]
+            currentPageNumber = page[0][0]
+            verifyData = self.bootReadRequest(currentPageNumber)
+            for index, item in enumerate(verifyData):
+                if item != pageData[index]:
+                    notice(self, "VERIFY ERROR IN PAGE: "+ str(currentPageNumber)+ " BYTE: "+ str(index))
+                    notice(self, "VERIFY FAILED")
+                    return False
+            notice(self, "PAGE " + str(currentPageNumber) + " VERIFIED!")
+        notice(self, "VERIFY PASSED")
+        #start application
+        if not self.runApplication():
+            notice(self, "COULD NOT START APPLICATION")
+            return FALSE
+        #register new node with gestalt interface
+        #self.target.nodeManager.assignNode(self)    #registers node with target        
+        #need something here to import a new node into self.shell based on URL from node    
+        return True
     
+    
+    
+    def initBootload(self):
+        """Initializes bootloader."""
+        return self.bootCommandRequest('startBootload')
+    
+    def runApplication(self):
+        """Starts the physical node application firmware."""
+        return self.bootCommandRequest('startApplication')
+
     # --- actionObjects ---
     class statusRequest(core.actionObject):
         """Checks whether node is in bootloader or application mode and whether the node application firmware is valid.""" 
@@ -364,7 +502,7 @@ class gestaltNode(baseGestaltNode):
                     responseCode = self.getPacket()['responseCode'] #pull response code from packet
                     if command == 'startBootloader' and responseCode == responseSet['bootloaderStarted']: #received valid reply to startBootloader command
                         return True
-                    elif command == 'startAplication' and responseCode == responseSet['applicationStarted']: #received valid reply to startApplication command
+                    elif command == 'startApplication' and responseCode == responseSet['applicationStarted']: #received valid reply to startApplication command
                         return True
                     else:
                         notice(self.virtualNode, "Received invalid response from node to bootloader command "+ command + ".")
@@ -591,31 +729,60 @@ class nodeShell(object):
         self._nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
                                         #Used to prevent the virtual node from cyclically reloading itself over and over if for some reason it is of the
                                         #gestaltNode type (and not a user-created subclass).
-        
-        if self._sourceFilename_: self._loadNodeFromFile_(self._sourceFilename_, args, kwargs) #load from provided filename
-        elif self._sourceURL_: self._loadNodeFromURL_(self._sourceURL_, args, kwargs) #load from provided URL
-        elif self._sourceModule_: self._loadNodeFromModule_(self._sourceModule_, args, kwargs) #load from provided module
+        self._oldNodeLoaded_ = False #allows to revert to prior state of _nodeLoaded_
+        self._virtualNode_ = False  #this is where a reference to the virtual node instance will get stored. Default is False until virtual node successfully loaded.
+
+        #attempt to load node from a provided source
+        if self._sourceFilename_:
+            self._setNodeLoaded_() #pre-mark as node loaded, because this gets checked by new node on instantiation.
+            if not self._loadNodeFromFile_(self._sourceFilename_, args, kwargs): #load from provided filename
+                self._revertNodeLoaded_() #unable to load from provided filename
+                notice(self, "Unable to load node from provided filename.")
+        elif self._sourceURL_:
+            self._setNodeLoaded_()
+            if not self._loadNodeFromURL_(self._sourceURL_, args, kwargs): #load from provided URL
+                self._revertNodeLoaded_()   #unable to load from provided URL
+                notice(self, "Unable to load node from provided URL.")
+        elif self._sourceModule_: 
+            self._setNodeLoaded_()
+            if not self._loadNodeFromModule_(self._sourceModule_, args, kwargs): #load from provided module
+                self._revertNodeLoaded_()   #unable to load from provided module
+                notice(self, "Unable to load node from provided module.")
         else: self._virtualNode_ = False #No source provided to load node. Let the subclass handle that.
         
         self._shellInit_(self, *args, **kwargs)    #call subclass's init method with provided arguments
 
 
-    def _setNodeInShell_(self, virtualNode, loadedFlag = True):
+    def _setNodeInShell_(self, virtualNode):
         """Performs a sequence of steps to load a node into the shell.
         
         virtualNode -- the node to load into the shell
-        loadedFlag -- if True, self._nodeLoaded_ is set to true, indicating that a non-default node resides in the shell.
         """
         self._virtualNode_ = virtualNode    #store reference to virtual node
-        self._nodeLoaded_ = loadedFlag
         if '_name_' in self.__dict__:   #removes the shell's temporary name, so that the attribute request maps onto the node.
             self.__dict__.pop('_name_')
+    
+    def _setNodeLoaded_(self):
+        """Sets the _nodeLoaded_ flag while storing prior state.
+        
+        The _nodeLoaded_ flag prevents nodes from recursively reloading in an infinite loop by indicating a successful prior load. 
+        To accomplish this the flag must be set before it is know whether the node has successfully loaded (i.e. before the node's
+        __init__ routine returns.) This method allows this to be done safely by storing the prior version, which can be recalled
+        with _revertNodeLoaded_.
+        """
+        self._oldNodeLoaded_ = self._nodeLoaded_    #store in case need to roll back
+        self._nodeLoaded_ = True
+    
+    def _revertNodeLoaded_(self):
+        """Reverts the _nodeLoaded_ flag to its state before the last call to _setNodeLoaded_"""
+        self._nodeLoaded_ = self._oldNodeLoaded_
+        
         
     def _loadNodeFromFile_(self, filename, args = [], kwargs = {}):
         """Loads a node into the shell from a provided file."""
         try:
             virtualNode = imp.load_source('', filename).virtualNode(*args, **kwargs)    #instantiate virtual node from file
-            self._setNodeInShell_(virtualNode, loadedFlag = True)   #set the node into the shell
+            self._setNodeInShell_(virtualNode)   #set the node into the shell
             return True
         except IOError, error:
             notice(self, "Can not load virtual node from file " + str(filename))
@@ -643,10 +810,11 @@ class nodeShell(object):
             else: 
                 notice(self, "File dowloaded from URL does not appear to contain a valid virtual node.")
                 return False  #error message will be generated by _loadNodeFromFile_
-        except IOError, error:
+        except StandardError, error:
             notice(self, "Could not load " + str(vnFilename) + " from " + URL)
             notice(self, "Error: " + str(error))
             notice(self, "Attempting to load virtual node from the local directory...")
+            self._virtualNode_ = False #unable to load node
             return self._loadNodeFromFile_(vnFilename, args, kwargs)
     
     def _loadNodeFromModule_(self, module, args = [], kwargs = {}):
@@ -660,16 +828,28 @@ class nodeShell(object):
             else: #assume that module is the virtualNode class
                 self._setNodeInShell_(module(*args, **kwargs)) #attempt to insantiate and set into shell
                 #maybe should check the type before doing this.
+                return True
         except AttributeError, error:
             notice(self, "Unable to load virtual node from module")
             notice(self, "Error: " + str(error))
+            return False
     
     def __getattr__(self, attribute):
         """Forwards any unsupported calls from the shell onto the node.
         
-        This function is the crux of the shell. All it does is pass along calls to the virtualNode, which is what
-        allows the virtualNodes to be swapped while maintaining external references.
+        This function is the crux of the shell. All it does is pass along calls to the virtualNode, thus allowing
+        the virtualNodes to be swapped while maintaining external references to the node.
         """
+        if self._virtualNode_:  #shell contains a valid virtual node
+            if hasattr(self._virtualNode_, attribute):  #check to make sure virtual node has the requested attribute
+                return getattr(self._virtualNode_, attribute)   #return the attribute of the virtual node
+            else:   #virtual node doesn't have the requested attribute
+                notice(self, "Node doesn't have the requested attribute")
+                raise AttributeError(attribute)
+        else:   #no virtual node has been loaded into the shell
+            notice(self, "Node is not initialized")
+            raise AttributeError(attribute)
+            
     
     def _shellInit_(self, *args, **kwargs):
         """Dummy init function for shell.
