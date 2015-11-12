@@ -1,3 +1,8 @@
+October 12th, 2015
+Obviously a lot has happened since last entry but just writing a placeholder to remember immediate next steps. It's looking like the best way to initialize init
+functions is to call init() first, then initPackets(), then initPorts(), etc... rather than doing the entire init process for each subclass before proceeding to the next.
+The reason is because one could imagine that the user wants to modify parameters set in init() e.g. bootPageSize before the base gestaltNode packets get defined.
+
 October 24th, 2015
 
 I've encountered an annoying issue, which stems from wanting to set class properties for actionObject classes. bindPort does this to associate

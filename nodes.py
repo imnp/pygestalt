@@ -8,7 +8,7 @@ import threading
 import time
 import imp, os, urllib  #for importing files
 import copy
-from pygestalt import core, packets
+from pygestalt import core, packets, utilities
 from pygestalt.utilities import notice
 
 class baseVirtualNode(object):
@@ -19,19 +19,6 @@ class baseVirtualNode(object):
         
         This should be overridden.
         """
-
-    def _recursiveInit_(self, recursionDepth, *args, **kwargs):
-        """Dummy initializer function."""
-        pass
-    
-    def _recursiveInitLast_(self, recursionDepth):
-        """Dummy final initialization function."""
-        pass
-    
-    def _recursiveOnLoad_(self, recursionDepth):
-        """Dummy onLoad function.
-        
-        This is where the recursion terminates"""
         pass
 
 class baseGestaltNode(baseVirtualNode):
@@ -42,8 +29,16 @@ class baseGestaltNode(baseVirtualNode):
         
         Initialization occurs by calling a sequence of specialized initialization functions. In order to
         support inheritance, and to make sure that all of the inherited functions are called, the parent
-        class initialization functions must be called recursively. This function is the entry point into
-        the process and starts at a recursion depth of 0.
+        class initialization functions must be called. This function is the entry point into
+        the process.
+
+        Initialization occurs in the following steps, each across the virtual node instance's method resolution order:
+        2) init: user initialization routine for defining optional constants etc. that are specific to the node
+        3) packets: packet templates are defined here
+        4) ports: actionObjects and packets are bound to ports
+        5) last: any actions that must be performed after all subclasses have had a chance to initialize, like setting the node into the interface.
+        --- node is bound to interface here ---
+        6) onLoad: anything that needs to get initialized with the ability to communicate to the node.
         
         PARAMETERS PULLED FROM KEYWORD ARGUMENTS (and not passed along to child classes):
         name -- the name of the node
@@ -74,56 +69,14 @@ class baseGestaltNode(baseVirtualNode):
             self._shell_ = None
             
         #-- Initialization--
-        self._recursiveInit_(0, *args, **kwargs) #begin recursive initialization at a depth of 0.
-        self._recursiveInitLast_(0) #begin recursive initLast
-        self._initInterface_() #Initializes node into a gestalt interface
+        utilities.callFunctionAcrossMRO(self, "init", args, kwargs)
+        utilities.callFunctionAcrossMRO(self, "initPackets")
+        utilities.callFunctionAcrossMRO(self, "initPorts")
+        utilities.callFunctionAcrossMRO(self, "initLast")
         if not self._updateVirtualNode_(originalArgs, originalKwargs):  #Updates the virtual node object contained within _shell_ based on URL received from node
-            self._recursiveOnLoad_(0)   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
+            utilities.callFunctionAcrossMRO(self, "onLoad")   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
         else: #returned True: this virtual node instance has been supplanted
             pass    #last instruction that will be called on this particular virtual node instance
-            
-            
-    def _recursiveInit_(self, recursionDepth, *args, **kwargs):
-        """Recursively initializes Gestalt node.
-        
-        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__
-        Initialization occurs in the following steps:
-        1) parent class initialization: a call to parentClass._recursiveInit_
-        2) init: user initialization routine for defining optional constants etc. that are specific to the node
-        3) packets: packet templates are defined here
-        4) ports: actionObjects and packets are bound to ports
-        
-        The following final steps are done in individual recursive batches, so each will run on all subclasses before the next is called.
-        5) last: any actions that must be performed after all subclasses have had a chance to initialize, like setting the node into the interface.
-        --- node is bound to interface here ---
-        6) onLoad: anything that needs to get initialized with the ability to communicate to the node.
-        """
-        baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
-        parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
-        parentClass._recursiveInit_(self, recursionDepth + 1, *args, **kwargs) #recursively initialize using parent class
-        if 'init' in baseClass.__dict__: baseClass.init(self, *args, **kwargs) #run user initialization routine with provided arguments
-        if 'initPackets' in baseClass.__dict__: baseClass.initPackets(self) #initialize packets
-        if 'initPorts' in baseClass.__dict__: baseClass.initPorts(self) #initialize ports
-    
-    def _recursiveInitLast_(self, recursionDepth):
-        """Recursively calls initLast routine across parent virtual node classes.
-        
-        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__, after calling _recursiveInit_
-        """
-        baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
-        parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
-        parentClass._recursiveInitLast_(self, recursionDepth + 1) #recursively calls onLoad using parent class        
-        if 'initLast' in baseClass.__dict__: baseClass.initLast(self) #run after initialization is complete        
-    
-    def _recursiveOnLoad_(self, recursionDepth):
-        """Recursively calls onLoad routine across parent virtual node classes.
-        
-        THIS FUNCTION IS ONLY CALLED INTERNALLY BY __init__, after calling _recursiveInitLast_
-        """
-        baseClass = self.__class__.mro()[recursionDepth] #base class is determined by the method resolution order indexed by the recursion depth.
-        parentClass = self.__class__.mro()[recursionDepth + 1] #parent class is determined the same way
-        parentClass._recursiveOnLoad_(self, recursionDepth + 1) #recursively calls onLoad using parent class        
-        if 'onLoad' in baseClass.__dict__: baseClass.onLoad(self) #run after initialization is complete
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
@@ -173,8 +126,10 @@ class baseGestaltNode(baseVirtualNode):
             return False
 
         if self._shell_._nodeLoaded_:   #a non-default node is already loaded into the shell.
+            print "shell already loaded"
             return False
         
+        #put into application mode
         nodeStatus, appValid = self.statusRequest() #get current status of node
         
         if not appValid:    #application is not valid
@@ -188,6 +143,7 @@ class baseGestaltNode(baseVirtualNode):
                 return False
 
         nodeURL = self.urlRequest() #get node URL
+        print "loading node"
         
         self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
 

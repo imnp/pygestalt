@@ -9,6 +9,29 @@ import ast
 import datetime
 import itertools
 
+def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parentToChild = True):
+    """Calls a function on all classes in instance's method resolution order.
+    
+    instance -- the instance to be provided to the class methods, and also used to pull the method resolution order list.
+    functionName -- the name of the function to be called
+    args -- positional arguments to be passed to the function
+    kwargs -- keyward arguments to be passed to the function
+    parentToChild -- affects the order in which base classes are called. If true, will walk up derived classes from basest base class.
+    
+    This function is particularly useful in initialiation routines where the same function must be called across multiple derived classes.
+    
+    Note that it only currently works with functions that do not return anything.
+    """
+    
+    mro = instance.__class__.mro()  #grab the MRO from the instance
+    if parentToChild:
+        mro.reverse()   #need to reverse MRO so iterates up derived class chain
+        
+    for thisClass in mro:   #iterate over classes in method resolution order
+        if functionName in thisClass.__dict__:  #check to make sure class has function defined in __dict__. This prevents calling a base class's method multiple times.
+            thisClass.__dict__[functionName](instance, *args, **kwargs)   #call class function on instance with provided arguments
+    
+    
 def notice(callingObject, noticeString):
     """Prints a formatted notice in the terminal window that includes the name of the source.
     
