@@ -155,7 +155,7 @@ class baseGestaltNode(baseVirtualNode):
         """Initializes the node in the context of an interface by which it will communicate with the outside world."""
         pass
 
-    def _updateVirtualNode_(self, args = [], kwargs = {}):
+    def _updateVirtualNode_(self, args = (), kwargs = {}):
         """Attempts to replace virtual node instance residing inside _shell_ (e.g. self) with an updated version as referenced by the physical node's URL.
         
         This is perhaps one of the weirder initialiation steps of the Gestalt node. As has been discussed previously, when a virtual node is first initialized and
@@ -170,11 +170,9 @@ class baseGestaltNode(baseVirtualNode):
         """ 
         #run some basic checks first
         if self._shell_ == None:    #no shell has been provided
-            print "No Shell Provided"
             return False
 
         if self._shell_._nodeLoaded_:   #a non-default node is already loaded into the shell.
-            print "Node already loaded"
             return False
         
         nodeStatus, appValid = self.statusRequest() #get current status of node
@@ -190,17 +188,10 @@ class baseGestaltNode(baseVirtualNode):
                 return False
 
         nodeURL = self.urlRequest() #get node URL
-        print nodeURL
         
-        self._shell_._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
-        if not self._shell_._loadNodeFromURL_(nodeURL, args, kwargs):   #unable to load node
-            self._shell_._revertNodeLoaded()
-            return False
-        else:
-            return True
-                
-                        
-    
+        self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
+
+
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
         """Attaches actionObject classes and templates to a communication port, and initializes relevant parameters.
         
@@ -313,7 +304,7 @@ class gestaltNode(baseGestaltNode):
         #synthetic node parameters
         self.synApplicationMemorySize = 32768  #application memory size in bytes. Used for synthetic responses
         self.synApplicationMemory = [255 for bytePosition in range(self.synApplicationMemorySize)]  #used for synthetic bootloader program load
-        self.synNodeURL = "http://www.pygestalt.org/vn/gestaltNode.py"  #fake URL
+        self.synNodeURL = "http://www.pygestalt.org/vn/testNode.py"  #fake URL
         self.synNodeAddress = 0 #synthetic node address. Note that eventually will need synthetic node address persistence.
     
     def initPackets(self):
@@ -729,28 +720,15 @@ class nodeShell(object):
         self._nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
                                         #Used to prevent the virtual node from cyclically reloading itself over and over if for some reason it is of the
                                         #gestaltNode type (and not a user-created subclass).
-        self._oldNodeLoaded_ = False #allows to revert to prior state of _nodeLoaded_
+
         self._virtualNode_ = False  #this is where a reference to the virtual node instance will get stored. Default is False until virtual node successfully loaded.
 
-        #attempt to load node from a provided source
-        if self._sourceFilename_:
-            self._setNodeLoaded_() #pre-mark as node loaded, because this gets checked by new node on instantiation.
-            if not self._loadNodeFromFile_(self._sourceFilename_, args, kwargs): #load from provided filename
-                self._revertNodeLoaded_() #unable to load from provided filename
-                notice(self, "Unable to load node from provided filename.")
-        elif self._sourceURL_:
-            self._setNodeLoaded_()
-            if not self._loadNodeFromURL_(self._sourceURL_, args, kwargs): #load from provided URL
-                self._revertNodeLoaded_()   #unable to load from provided URL
-                notice(self, "Unable to load node from provided URL.")
-        elif self._sourceModule_: 
-            self._setNodeLoaded_()
-            if not self._loadNodeFromModule_(self._sourceModule_, args, kwargs): #load from provided module
-                self._revertNodeLoaded_()   #unable to load from provided module
-                notice(self, "Unable to load node from provided module.")
+        if self._sourceFilename_: self._loadNodeFromFile_(self._sourceFilename_, args, kwargs) #load from provided filename
+        elif self._sourceURL_: self._loadNodeFromURL_(self._sourceURL_, args, kwargs) #load from provided URL
+        elif self._sourceModule_: self._loadNodeFromModule_(self._sourceModule_, args, kwargs) #load from provided module
         else: self._virtualNode_ = False #No source provided to load node. Let the subclass handle that.
         
-        self._shellInit_(self, *args, **kwargs)    #call subclass's init method with provided arguments
+        self._shellInit_(*args, **kwargs)    #call subclass's init method with provided arguments
 
 
     def _setNodeInShell_(self, virtualNode):
@@ -778,18 +756,20 @@ class nodeShell(object):
         self._nodeLoaded_ = self._oldNodeLoaded_
         
         
-    def _loadNodeFromFile_(self, filename, args = [], kwargs = {}):
+    def _loadNodeFromFile_(self, filename, args = (), kwargs = {}):
         """Loads a node into the shell from a provided file."""
         try:
+            self._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
             virtualNode = imp.load_source('', filename).virtualNode(*args, **kwargs)    #instantiate virtual node from file
             self._setNodeInShell_(virtualNode)   #set the node into the shell
             return True
         except IOError, error:
             notice(self, "Can not load virtual node from file " + str(filename))
             notice(self, "Error: " + str(error))
+            self._revertNodeLoaded_()  #unable to load node, revert flag
             return False
             
-    def _loadNodeFromURL_(self, URL, args = [], kwargs = {}):
+    def _loadNodeFromURL_(self, URL, args = (), kwargs = {}):
         """Loads a node into the shell from a provided URL.
         
         Loading follows the following algorithm:
@@ -817,21 +797,22 @@ class nodeShell(object):
             self._virtualNode_ = False #unable to load node
             return self._loadNodeFromFile_(vnFilename, args, kwargs)
     
-    def _loadNodeFromModule_(self, module, args = [], kwargs = {}):
+    def _loadNodeFromModule_(self, module, args = (), kwargs = {}):
         """Loads a node into the shell from a provided module.
         
         Note that the class itself should be provided, NOT a class instance.
         """
         try:
+            self._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
             if hasattr(module, 'virtualNode'):  #module has a top-level virtualNode class
                 self._setNodeInShell_(module.virtualNode(*args, **kwargs)) #instantiate and set into shell
             else: #assume that module is the virtualNode class
                 self._setNodeInShell_(module(*args, **kwargs)) #attempt to insantiate and set into shell
                 #maybe should check the type before doing this.
-                return True
         except AttributeError, error:
             notice(self, "Unable to load virtual node from module")
             notice(self, "Error: " + str(error))
+            self._revertNodeLoaded_()   #revert _nodeLoaded_ flag to prior state
             return False
     
     def __getattr__(self, attribute):
@@ -856,5 +837,9 @@ class nodeShell(object):
         
         This function should be overridden by the child nodes."""
         pass
-    
+
+class gestaltNodeShell(nodeShell):
+    """The base node shell for gestalt-based nodes."""
+    def _shellInit_(self, *args, **kwargs):
+        self._virtualNode_ = gestaltNode(*args, **kwargs)
         

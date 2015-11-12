@@ -74,7 +74,7 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 
 # # The code below tests whether actionObject classes are being copied
 
-myGestaltNode = nodes.nodeShell(name = "myGestaltNode", filename = "testNode.py")
+myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 
 # myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
 
