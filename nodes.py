@@ -126,7 +126,6 @@ class baseGestaltNode(baseVirtualNode):
             return False
 
         if self._shell_._nodeLoaded_:   #a non-default node is already loaded into the shell.
-            print "shell already loaded"
             return False
         
         #put into application mode
@@ -143,7 +142,6 @@ class baseGestaltNode(baseVirtualNode):
                 return False
 
         nodeURL = self.urlRequest() #get node URL
-        print "loading node"
         
         self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
 
@@ -797,5 +795,6 @@ class nodeShell(object):
 class gestaltNodeShell(nodeShell):
     """The base node shell for gestalt-based nodes."""
     def _shellInit_(self, *args, **kwargs):
-        self._virtualNode_ = gestaltNode(*args, **kwargs)
+        if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
+            self._virtualNode_ = gestaltNode(*args, **kwargs)
         

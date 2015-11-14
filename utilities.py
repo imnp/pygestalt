@@ -20,7 +20,7 @@ def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parent
     
     This function is particularly useful in initialiation routines where the same function must be called across multiple derived classes.
     
-    Note that it only currently works with functions that do not return anything.
+    Note that this only currently works with functions that do not return anything.
     """
     
     mro = instance.__class__.mro()  #grab the MRO from the instance
