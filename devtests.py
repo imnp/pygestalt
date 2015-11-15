@@ -75,11 +75,11 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 # # The code below tests whether actionObject classes are being copied
 
 myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
-
+# print myGestaltNode._virtualNode_
 # myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
 
-# print myGestaltNode.statusRequest()
-# 
+print myGestaltNode.statusRequest()
+ 
 print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
 print myGestaltNode.bootReadRequest(pageNumber = 127)
 print myGestaltNode.urlRequest()

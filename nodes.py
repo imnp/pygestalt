@@ -8,7 +8,7 @@ import threading
 import time
 import imp, os, urllib  #for importing files
 import copy
-from pygestalt import core, packets, utilities
+from pygestalt import core, packets, utilities, interfaces
 from pygestalt.utilities import notice
 
 class baseVirtualNode(object):
@@ -24,7 +24,17 @@ class baseVirtualNode(object):
 class baseGestaltNode(baseVirtualNode):
     """Base class for Gestalt nodes."""
 
-    def __init__(self, *args, **kwargs):
+    def __new__(cls, *args, **kwargs):
+        """Instantiation routine for baseGestaltNode base class.
+        
+        When a call is made to the baseGestaltNode class, this "magic" function creates the instance.
+        It is necessary to define a custom __new__ to support nodes updating themselves on instantiation.
+        The object returned by this function may not be the original node instance, but one created recursively.
+        """
+        newBaseGestaltNode = baseVirtualNode.__new__(cls)
+        return newBaseGestaltNode._init_(*args, **kwargs)
+
+    def _init_(self, *args, **kwargs):
         """Initializes Gestalt Node.
         
         Initialization occurs by calling a sequence of specialized initialization functions. In order to
@@ -44,14 +54,16 @@ class baseGestaltNode(baseVirtualNode):
         name -- the name of the node
         interface -- the interface to use for communication
         _shell_ -- if the node is set within a shell, the shell object passes along a self-reference here
+        
+        Returns the active virtual node instance
         """
         
         self._outboundPortTable_ = {}   #stores function:port pairs as assigned by bindPort
         self._inboundPortTable_ = {} #stores port:function pairs as assigned by bindPort
         
         #-- Parse Optional Initialization Parameters --
-        originalArgs = copy.copy(args)  #store original arguments for _updateVirtualNode_
-        originalKwargs = copy.copy(kwargs)
+        self._originalInitArgs_ = copy.copy(args)  #store original arguments for _updateVirtualNode_
+        self._originalInitKwargs_ = copy.copy(kwargs)
         
         if "name" in kwargs:
             self._name_ = kwargs.pop("name")    #pop name from named arguments, and set as node name. This is used by utilities.notice and for persistence.
@@ -73,10 +85,12 @@ class baseGestaltNode(baseVirtualNode):
         utilities.callFunctionAcrossMRO(self, "initPackets")
         utilities.callFunctionAcrossMRO(self, "initPorts")
         utilities.callFunctionAcrossMRO(self, "initLast")
-        if not self._updateVirtualNode_(originalArgs, originalKwargs):  #Updates the virtual node object contained within _shell_ based on URL received from node
+        self._initInterface_()  #initialize interface
+        if not self._updateVirtualNode_(self._originalInitArgs_, self._originalInitKwargs_):  #Updates the virtual node object contained within _shell_ based on URL received from node
             utilities.callFunctionAcrossMRO(self, "onLoad")   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
+            return self
         else: #returned True: this virtual node instance has been supplanted
-            pass    #last instruction that will be called on this particular virtual node instance
+            return self._shell_._virtualNode_    #don't use me, use the virtualNode instance already in the shell.
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
@@ -105,8 +119,36 @@ class baseGestaltNode(baseVirtualNode):
         pass
     
     def _initInterface_(self):
-        """Initializes the node in the context of an interface by which it will communicate with the outside world."""
-        pass
+        """Initializes the node in the context of an interface by which it will communicate with the outside world.
+        
+        Initialization occurs in several steps:
+        (1) instantiate a gestalt interface if one wasn't provided, and update in originalInitKwargs
+        (2) set this virtual node into interface
+        (3) set the virtual node's address
+        """
+        if self._interface_:    #an interface was provided
+            if type(self._interface_) != interfaces.gestaltInterface:   #Need to create a gestalt interface. Implies only one node
+                #figure out name of new interface
+                if self._interface_._name_: #provided interface has a name, pass that along
+                    newInterfaceName = self._interface_._name_
+                else:   #create a new name
+                    if self._name_: #virtual node has a name
+                        newInterfaceName = self._name_+"GestaltInterface" #since the interface is dedicated to only one node, it's OK to use this node's name
+                    else:
+                        newInterfaceName = None #whoever is using the name will figure this out.
+                self._interface_ = interfaces.gestaltInterface(name = interfaceName, interface = self._interface_) #create a new gestalt interface
+            else:
+                pass #use the provided interface
+        else: #No interface provided
+            self._interface_ = interfaces.gestaltInterface() #need to fix this up later... just a temporary fix for now.
+        
+        self._originalInitKwargs_.update({'interface':self._interface_})    #update input kwargs so that new interface is passed along
+        
+        newAddress = self._interface_.attachNode(self)    #attach node to interface.
+        
+        if newAddress: #A new address was provided, therefor must associate
+            self.setAddressRequest(newAddress) #set node address to newAddress
+                
 
     def _updateVirtualNode_(self, args = (), kwargs = {}):
         """Attempts to replace virtual node instance residing inside _shell_ (e.g. self) with an updated version as referenced by the physical node's URL.
@@ -119,7 +161,7 @@ class baseGestaltNode(baseVirtualNode):
         explicitly provided. If no shell is provided it is assumed that the feature-complete virtual node has been directly imported. Keep in mind that the
         present function is part of the base class and will run multiple times.
         
-        Returns True if the node has successfully been replaced, or False if not.
+        Returns the new virtual node if the node has successfully been replaced, or False if not.
         """ 
         #run some basic checks first
         if self._shell_ == None:    #no shell has been provided
@@ -143,7 +185,7 @@ class baseGestaltNode(baseVirtualNode):
 
         nodeURL = self.urlRequest() #get node URL
         
-        self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
+        return self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
 
 
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
@@ -711,12 +753,20 @@ class nodeShell(object):
         
         
     def _loadNodeFromFile_(self, filename, args = (), kwargs = {}):
-        """Loads a node into the shell from a provided file."""
+        """Loads a node into the shell from a provided file.
+        
+        filename -- the file to load as a module
+        args -- a tuple of positional arguments to pass to the node on instantiation
+        kwargs -- a dictionary of keyword arguments to pass to the node on instantiation
+        
+        returns the loaded virtual node
+        """
+        
         try:
             self._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
             virtualNode = imp.load_source('', filename).virtualNode(*args, **kwargs)    #instantiate virtual node from file
             self._setNodeInShell_(virtualNode)   #set the node into the shell
-            return True
+            return virtualNode
         except IOError, error:
             notice(self, "Can not load virtual node from file " + str(filename))
             notice(self, "Error: " + str(error))
@@ -738,9 +788,10 @@ class nodeShell(object):
         try:
             vnFilename = os.path.basename(URL)
             urllib.urlretrieve(URL, "temporaryURLNode.py")  #retrieve file from URL
-            if self._loadNodeFromFile_("temporaryURLNode.py", args, kwargs):    #try to load node from temporary file
+            virtualNode = self._loadNodeFromFile_("temporaryURLNode.py", args, kwargs)
+            if virtualNode:    #try to load node from temporary file
                 #insert file copy logic here now that file has been validated
-                return True
+                return virtualNode
             else: 
                 notice(self, "File dowloaded from URL does not appear to contain a valid virtual node.")
                 return False  #error message will be generated by _loadNodeFromFile_
@@ -759,9 +810,13 @@ class nodeShell(object):
         try:
             self._setNodeLoaded_()    #pre-mark as node loaded, because this gets checked by new node on instantiation.
             if hasattr(module, 'virtualNode'):  #module has a top-level virtualNode class
-                self._setNodeInShell_(module.virtualNode(*args, **kwargs)) #instantiate and set into shell
+                virtualNode = module.virtualNode(*args, **kwargs)
+                self._setNodeInShell_(virtualNode) #instantiate and set into shell
+                return virtualNode
             else: #assume that module is the virtualNode class
-                self._setNodeInShell_(module(*args, **kwargs)) #attempt to insantiate and set into shell
+                virtualNode = module(*args, **kwargs)
+                self._setNodeInShell_(virtualNode) #attempt to insantiate and set into shell
+                return virtualNode
                 #maybe should check the type before doing this.
         except AttributeError, error:
             notice(self, "Unable to load virtual node from module")

@@ -1,3 +1,9 @@
+October 15th, 2015
+Node can update itself, now need to build out machinery so can start using actual hardware. 
+
+October 14th, 2015
+Need to figure out how to allow node to update itself with the gestalt interface. The key is using the _shell_ as a key that stays constant during node swaps
+
 October 12th, 2015
 Obviously a lot has happened since last entry but just writing a placeholder to remember immediate next steps. It's looking like the best way to initialize init
 functions is to call init() first, then initPackets(), then initPorts(), etc... rather than doing the entire init process for each subclass before proceeding to the next.
