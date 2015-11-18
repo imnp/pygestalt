@@ -230,7 +230,14 @@ class gestaltInterface(baseInterface):
             actionObjects into the sequence in which they should be transmitted over the channel.
             """
             return [actionMolecule]   #for now nothing fancy, assume only actionObjects are used.
+    
+    def commitToChannelPriorityQueue(self, actionMolecule):
+        """Adds the provided actionMolecule to the channelPriorityQueue
         
+        actionMolecule -- the actionMolecule to be added to the queue.
+        """
+        self._channelPriority_.putActionMolecule(actionMolecule)
+    
     class _channelAccessThread_(_interfaceThread_):
         pass
     

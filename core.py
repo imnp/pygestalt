@@ -95,7 +95,12 @@ class actionObject(object):
         """
         self._inboundPacketDictionary_ = self._inboundTemplate_.decode(serializedPacket)[0]    #decodes serializedPacket using _inboundTemplate_
         return True
-    
+
+    def commit(self):
+        """Places this actionObject in its virtualNode interface's channel priority queue."""
+        self.virtualNode._interface_.commitToChannelPriorityQueue(self)
+        return True
+ 
     def clearForRelease(self):
         """Flags the actionObject as clear to release from the channel priority queue.
         
@@ -115,7 +120,7 @@ class actionObject(object):
         
         *Add description here as build out priority and channel access queues.
         """
-        
+        self.commit()
         ###The following code should get replaced... just for fleshing out the synthetic functions for now!
         self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
         return True        
