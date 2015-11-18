@@ -232,9 +232,6 @@ class baseGestaltNode(baseVirtualNode):
             inboundTemplate = packets.emptyTemplate(templateName)
         
         #STORE PARAMETERS IN actionObject CLASSES
-        outboundActionObjectClass._port_ = port #store port number
-        inboundActionObjectClass._port_ = port
-        
         outboundActionObjectClass._inboundPacketFlag_ = inboundPacketFlag #store inbound packet flag
         inboundActionObjectClass._inboundPacketFlag_ = inboundPacketFlag
         

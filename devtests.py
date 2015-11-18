@@ -5,6 +5,7 @@ from pygestalt import utilities
 from pygestalt import core
 from pygestalt import nodes
 import copy
+import time
 
 # Define Packets
 # payloadTestPacket = packets.template('port5Default')
@@ -95,3 +96,4 @@ print myGestaltNode
 #         print "myGestaltNode onLoad"
          
 
+time.sleep(2)

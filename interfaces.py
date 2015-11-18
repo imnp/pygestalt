@@ -5,6 +5,7 @@
 
 #---- INCLUDES ----
 import threading
+import Queue
 import time
 import copy
 import random   #for generating new addresses
@@ -34,6 +35,7 @@ class gestaltInterface(baseInterface):
         self._shellNodeTable_ = {}          #maintains associations between virtual node shells and their contained nodes
         self._addressRangeMin_ = 1          #Reserve address 0.
         self._addressRangeMax_ = 65535      #maximum address value for gestalt nodes is 16-bit.
+        self._threadIdleTime_ = 0.0005      #seconds, time for thread to idle between runs of loop
         
         self._gestaltPacket_ = packets.template('gestaltPacketTemplate',
                                               packets.unsignedInt('_startByte_',1), #start byte, 72 for unicast, 138 for multicast
@@ -160,8 +162,75 @@ class gestaltInterface(baseInterface):
             pass
     
     class _channelPriorityThread_(_interfaceThread_):
-        pass
-    
+        """Manages actionObjects that are queued for release to the channel acess thread.
+        
+        The first step in an actionObject's winding path towards transmitting its packet is the channel priority queue. While in this
+        queue, actionObjects can still be modified, but the order in which they are queued cannot be changed. This permits features
+        such as look-ahead motion planning, because attributes such as velocity and acceleration may change once future commands have
+        been processed. Once an actionObject is released from the channel priority queue into the channel access queue, it can no
+        longer be modified.
+        """
+        def init(self):
+            """Initializes the channel priority thread."""
+            self.channelPriorityQueue = Queue.Queue()   #create the channel priority queue
+        
+        def run(self):
+            """The channel priority thread loop.
+            
+            This thread monitors the channel priority queue for a pending actionMolecule. Note that an actionMolecule can mean an object
+            of type core.actionObject, but can also mean nested collections of actionObjects like sets and sequences. Once an actionMolecule
+            has been cleared for release from the channel priority queue, it gets serialized into atomic actionObjects that are then released to the
+            channel access queue. 
+            """
+            while True: #repeat forever
+                pending, actionMolecule = self.getActionMolecule() #get the next actionObject (or actionSet, or actionSequence) from the queue.
+                if pending: #an actionMolecule is waiting in the queue
+                    while not actionMolecule.isClearForRelease():    #wait for the actionMolecule to be cleared for release from the queue
+                        time.sleep(self.interface._threadIdleTime_)  #idle
+                    for actionObject in self.serializeActionMolecule(actionMolecule):   #serialize actionMolecule into actionObjects, and iterate over them
+                        self.releaseActionObject(actionObject)  #put actionObject into the channel access queue
+                time.sleep(self.interface._threadIdleTime_) #idle
+                
+        def getActionMolecule(self):
+            """Attempts to pull an actionMolecule from the channel priority queue.
+            
+            Returns (True, actionMolecule) if an actionMolecule was waiting in the queue, or (False, None) if not.
+            """
+            try:
+                return True, self.channelPriorityQueue.get(block = False)    #signal success, return actionMolecule
+            except Queue.Empty:
+                return False, None  #signal failure, return None
+        
+        def putActionMolecule(self, actionMolecule):
+            """Places actionMolecules into the channel priority queue.
+            
+            actionMolecule -- the actionMolecule to place into the queue.
+            
+            An actionMolecule is either simply an actionObject of type core.actionObject, or a collection of actionObjects in the 
+            form of actionSets and actionSequences.
+            """
+            self.channelPriorityQueue.put(actionMolecule)
+            print "PUT " + str(actionMolecule)
+            return True
+        
+        def releaseActionObject(self, actionObject):
+            """Releases an actionObject to the channel access queue.
+            
+            actionObject -- the actionObject to be released
+            """
+            print "RELEASED " + str(actionObject)
+#             self.interface._channelAccess_.putActionObject(actionObject)
+            return True
+        
+        def serializeActionMolecule(self, actionMolecule):
+            """Serializes an actionMolecule into a sequence of actionObjects.
+            
+            actionMolecules are comprised of various actionObject-containing structures to support multi-packet operations
+            and synchronized packet execution. This function breaks apart these structures and serializes the contained
+            actionObjects into the sequence in which they should be transmitted over the channel.
+            """
+            return [actionMolecule]   #for now nothing fancy, assume only actionObjects are used.
+        
     class _channelAccessThread_(_interfaceThread_):
         pass
     

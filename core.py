@@ -4,6 +4,7 @@
 
 #--IMPORTS--
 import copy
+import threading
 
 class actionObject(object):
     """A token that embodies the logic behind packet generation.
@@ -24,8 +25,8 @@ class actionObject(object):
     """
     
     #Explicitly define class parameters here. These get set to real values when the actionObject is bound to a port by
-    #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks that are superseded by child class attributes.
-    _port_ = None
+    #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks that are superseded by derived class attributes.
+    
     _inboundPacketFlag_ = None  #Note that this flag is set dynamically, so need to be careful about which instance is monitoring it.
     _outboundTemplate_ = None
     _inboundTemplate_ = None
@@ -59,6 +60,9 @@ class actionObject(object):
         self._outboundPacketDictionary_ = {}    #stores key:value pairs to be encoded by _encodeOutboundPacket_
         self._inboundPacketDictionary_ = {} #stores key:value pairs decoded by _decodeAndSetInboundPacket_
         
+        self._clearForReleaseFlag_ = threading.Event() #Indicates that the actionObject can be released from the channel priority queue and await transmission
+        self._channelAccessGrantedFlag_ = threading.Event() #Indicates that the actionObject has been granted access to the channel in order to transmit
+        
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
         """actionObject subclass's initialization routine.
         
@@ -66,7 +70,7 @@ class actionObject(object):
         pass
     
     def setPacket(self, **kwargs):
-        """Updates the dictionary that will encode the actionObject's outgoing packet using the provided keyword arguments.
+        """Updates the dictionary that will be encoded by _outboundTemplate_ into an outgoing packet, using the provided keyword arguments.
         
         **kwargs -- all of the key:value pairs to be encoded are provided as keyword arguments to the function.
         """
@@ -92,32 +96,17 @@ class actionObject(object):
         self._inboundPacketDictionary_ = self._inboundTemplate_.decode(serializedPacket)[0]    #decodes serializedPacket using _inboundTemplate_
         return True
     
-    def _synthetic_(self, toSyntheticNodeSerializedPacket):
-        """Internal function that encodes and decodes packets en-route to user-provided synthetic service routine to support operation without physical nodes attached.
+    def clearForRelease(self):
+        """Flags the actionObject as clear to release from the channel priority queue.
         
-        toSyntheticNodeSerializedPacket -- a serialized packet that is being rerouted to a synthetic service routine instead of out to a physical node.
-        
-        New to Gestalt 0.7 is a debug mode where synthetic physical nodes can be used in leu of real ones. If the user wants to support this, they
-        need to write a function called 'synthetic' that pretends to be a service routine on the physical node. The purpose of _synthetic_ is to
-        provide encode/decode services for the user-provided synthetic function.
-
-        This function will call synthetic with a decoded dictionary, and will return an encoded version of the reply.
+        Note that the actual release procedure is performed by the channel priority thread.
         """
-        decodedPacket = self._outboundTemplate_.decode(toSyntheticNodeSerializedPacket)[0] #decode the incoming serialized packet
-        replyDictionary = self.synthetic(**decodedPacket) #call synthetic using decoded packet dictionary as the keyword arguments.
-        return self._inboundTemplate_.encode(replyDictionary) #return the encoded reply from synthetic
+        self._clearForReleaseFlag_.set() #set the clear to release flag
+        return True
     
-    def synthetic(self, **kwargs):
-        """Default synthetic service routine function.
-        
-        **kwargs -- when rewritten by the user, these should be named parameters that the synthetic service routine accepts.
-        
-        This function should be replaced by the user, and simulates the physical node's service routine.
-        
-        Returns None if user did not provide a synthetic service routine, or if no reply should be sent.
-        Otherwise returns a dictionary of values to get encoded and sent back to the virtual node.
-        """
-        return None
+    def isClearForRelease(self):
+        """Returns True if the actionObject has been cleared for release from the channel priority queue."""
+        return self._clearForReleaseFlag_.is_set()
     
     def transmit(self, mode = 'unicast'):
         """Transmits packet on the virtualNode's interface.
@@ -144,6 +133,32 @@ class actionObject(object):
         self.transmit(mode = mode)
         return True
 
+    def _synthetic_(self, toSyntheticNodeSerializedPacket):
+        """Internal function that encodes and decodes packets en-route to user-provided synthetic service routine to support operation without physical nodes attached.
+        
+        toSyntheticNodeSerializedPacket -- a serialized packet that is being rerouted to a synthetic service routine instead of out to a physical node.
+        
+        New to Gestalt 0.7 is a debug mode where synthetic physical nodes can be used in leu of real ones. If the user wants to support this, they
+        need to write a function called 'synthetic' that pretends to be a service routine on the physical node. The purpose of _synthetic_ is to
+        provide encode/decode services for the user-provided synthetic function.
+
+        This function will call synthetic with a decoded dictionary, and will return an encoded version of the reply.
+        """
+        decodedPacket = self._outboundTemplate_.decode(toSyntheticNodeSerializedPacket)[0] #decode the incoming serialized packet
+        replyDictionary = self.synthetic(**decodedPacket) #call synthetic using decoded packet dictionary as the keyword arguments.
+        return self._inboundTemplate_.encode(replyDictionary) #return the encoded reply from synthetic
+    
+    def synthetic(self, **kwargs):
+        """Default synthetic service routine function.
+        
+        **kwargs -- when rewritten by the user, these should be named parameters that the synthetic service routine accepts.
+        
+        This function should be replaced by the user, and simulates the physical node's service routine.
+        
+        Returns None if user did not provide a synthetic service routine, or if no reply should be sent.
+        Otherwise returns a dictionary of values to get encoded and sent back to the virtual node.
+        """
+        return None
 #--- GENERIC ACTION OBJECTS ---
 class genericActionObject(actionObject):
     """A perfectly generic actionObject type."""
