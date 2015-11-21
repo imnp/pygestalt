@@ -206,20 +206,20 @@ class baseGestaltNode(baseVirtualNode):
         
         #GENERATE actionObject CLASSES
         if outboundFunction != None:    #an outbound function has been provided
-            outboundActionObjectClass = self.addDerivedType(outboundFunction)   #this is the class that will actually get called to instantiate action objects
+            outboundActionObjectClass = self._addDerivedType_(outboundFunction)   #this is the class that will actually get called to instantiate action objects
                                                                                 #during use. It is a derived class of the provided outboundFunction class. 
             outboundActionObjectClass._baseActionObject_ = outboundFunction            #store the base class for introspection use later
         else: #no outbound function has been provided, must generate one.
             typeName = "outboundActionObjectOnPort"+ str(port)    #make up a name that is unique
-            outboundActionObjectClass = self.addDerivedType(core.genericOutboundActionObjectBlockOnReply, typeName)
+            outboundActionObjectClass = self._addDerivedType_(core.genericOutboundActionObjectBlockOnReply, typeName)
             outboundActionObjectClass._baseActionObject_ = core.genericOutboundActionObjectBlockOnReply
         
         if inboundFunction != None: #an inbound function has been provided
-            inboundActionObjectClass = self.addDerivedType(inboundFunction)
+            inboundActionObjectClass = self._addDerivedType_(inboundFunction)
             inboundActionObjectClass._baseActionObject_ = inboundFunction
         else: #no inbound function has been provided, must generate one
             typeName = "inboundActionObjectOnPort" + str(port)    #make up a name that is unique
-            inboundActionObjectClass = self.addDerivedType(core.genericInboundActionObject, typeName)
+            inboundActionObjectClass = self._addDerivedType_(core.genericInboundActionObject, typeName)
             inboundActionObjectClass._baseActionObject_ = inboundFunction
         
         #GENERATE MISSING PACKET TEMPLATES
@@ -248,7 +248,7 @@ class baseGestaltNode(baseVirtualNode):
         self._outboundPortTable_.update({outboundActionObjectClass:port})
         self._inboundPortTable_.update({port:inboundActionObjectClass})
     
-    def addDerivedType(self, baseClass, name = None):
+    def _addDerivedType_(self, baseClass, name = None):
         """Creates a new type using baseClass as the base, and adds the baseClass entry in self.__dict__.
         
         baseClass -- the parent class from which to make a derived type.
@@ -276,6 +276,18 @@ class baseGestaltNode(baseVirtualNode):
         self.__dict__.update({typeName:newType})
         return newType
     
+    def getPortNumber(self, actionObject):
+        """Returns the port to which a provided actionObject is bound.
+        
+        actionObject -- the action object to look up in the node's outbound port table.
+        Returns the port number if avaliable, otherwise returns False
+        """
+        if type(actionObject) in self._outboundPortTable_:
+            return self._outboundPortTable_[type(actionObject)]
+        else:
+            notice(self, "actionObject type " + str(type(actionObject)) + "is not bound to this node.")
+            return False
+        
 class gestaltNode(baseGestaltNode):
     """The standard Gestalt node class.
     

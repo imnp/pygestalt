@@ -5,6 +5,7 @@
 #--IMPORTS--
 import copy
 import threading
+from pygestalt.utilities import notice
 
 class actionObject(object):
     """A token that embodies the logic behind packet generation.
@@ -102,7 +103,7 @@ class actionObject(object):
     def commit(self):
         """Places this actionObject in its virtualNode interface's channel priority queue."""
         self._committedFlag_ = True     #record that actionObject has been committed
-        self.virtualNode._interface_.commitToChannelPriorityQueue(self)
+        self.virtualNode._interface_.commit(self)
         return True
  
     def _isCommitted_(self):
@@ -133,19 +134,66 @@ class actionObject(object):
         self.onChannelAccess()  #call the user-defined onChannelAccess method
         self._channelAccessGrantedFlag_.set()   #set the channel access flag, to indicate to another thread that the actionObject has channel access
     
+    def channelAccessIsGranted(self):
+        """Returns True if the actionObject currently has interface channel access."""
+        return self._channelAccessGrantedFlag_.is_set()
+    
     def onChannelAccess(self):
         """User-overrridden optional method that gets called when the node receives channel access."""
         pass
+        
+    def waitForChannelAccess(self, timeout = None):
+        """Blocks until the actionObject is granted channel access, or until timeout.
+        
+        timeout -- time in seconds to wait for channel access before admitting failure. A timeout of None means to wait indefinitely
+        Returns True on channel access, and False on timeout.
+        
+        This function is most typically used from within an actionObject's init function to block the calling thread until having the opportunity to transmit
+        and often receive.
+        """
+        if self._channelAccessGrantedFlag_.wait(timeout):
+            return True     #access has been granted
+        else:
+            return False    #timeout
     
-    def transmit(self, mode = 'unicast', releaseChannelOnReturn = True):
+    def _releaseChannelAccessLock_(self):
+        """Releases the actionObject's channel access lock."""
+        if type(self._channelAccessLock_) != threading.Lock:    #check that channel access lock is the right type
+            try:
+                self._channelAccessLock_.release()  #attempt to release the lock
+                return True
+            except threading.ThreadError:   #channel access lock was already released
+                notice(self, "Channel access lock was already released on call to _releaseChannelAccessLock_.")
+                return False
+        else:   #channel acess lock is not of type threading.Lock. How did it get there? Or why wasn't it set?
+            notice(self, "actionObject has no valid channel access lock on call to _releaseChannelAccessLock_")
+            notice(self, "Instead channel access lock type is " + str(type(self._channelAccessLock_)))
+            return False
+                
+        
+    def transmit(self, mode = 'unicast', releaseChannelOnTransmit = True):
         """Transmits packet on the virtualNode's interface.
         
         mode -- the transmission mode, either 'unicast to direct at a single node, or 'multicast' to direct at all nodes.
-        releaseChannelOnReturn -- If True (default), will automatically release the actionObject's channel lock after transmission
-        
-        *Add description here as build out priority and channel access queues.
+        releaseChannelOnTransmit -- If True (default), will automatically release the actionObject's channel lock after transmission
         """
-        self.commit()
+        
+        if self.channelAccessIsGranted():   #very likely that transmit has been called from within an onChannelAccess function, since access is avaliable immediately
+            self.virtualNode._interface_.transmit(actionObject = self, mode = mode)  #pass actionObject to interface for transmission
+            if releaseChannelOnTransmit:  #check if should release the channel lock after transmission
+                self._releaseChannelAccessLock_()  #release the channel access lock
+            return True
+        else:   #transmit was called before actionObject was granted channel access, take node thru to channel access
+            if not self._isCommitted_():    #check if actionObject is already committed
+                self.commit()   #commit actionObject to channel priority queue
+            if not self._isClearForRelease_():   #check if actionObject is cleared for release from the channel priority queue
+                self.clearForRelease()  #clear actionObject for release from the channel priority queue
+            if self.waitForChannelAccess(): #wait for channel access
+                self.virtualNode._interface_.transmit(actionObject = self, mode = mode) #transmit on interface
+            else:
+                notice(self, "timed out waiting for channel access")    #timed out!
+                return False
+            
         ###The following code should get replaced... just for fleshing out the synthetic functions for now!
         self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
         return True        
@@ -160,7 +208,8 @@ class actionObject(object):
         This is an area in which to potentially improve Gestalt, by building in some functionality that
         can identify and respond intelligently to when a node goes down.
         """
-        self.transmit(mode = mode)
+        self.transmit(mode = mode, releaseChannelOnTransmit = False)
+        self._releaseChannelAccessLock_()
         return True
 
     def _synthetic_(self, toSyntheticNodeSerializedPacket):

@@ -289,7 +289,7 @@ class gestaltInterface(baseInterface):
             return True
        
   
-        def grantChanelAccess(self, actionObject):
+        def grantChannelAccess(self, actionObject):
             """Grants interface channel access to an actionObject.
                 
             actionObject -- the action object which should be granted access.
@@ -301,6 +301,38 @@ class gestaltInterface(baseInterface):
             """
             actionObject._grantChannelAccess_(self.channelAccessLock)    #grant channel access to the actionObject, and pass along the access lock                
     
+    def _getVirtualNodeAddress_(self, virtualNode):
+        """Returns the address of a provided virtual node.
+        
+        virtualNode -- the virtualNode instance whose address needs to be looked up.
+        """
+        if virtualNode in self._nodeAddressTable_:
+            return self._nodeAddressTable_[virtualNode]
+        else:
+            return False
+    
+    def transmit(self, actionObject, mode):
+        """Transmits a provided actionObject's packet over the interface.
+        
+        actionObject -- the actionObject making the call to transmit
+        mode -- either 'unicast' or 'multicast'
+        
+        returns True if successful, or False if an error is encountered
+        """
+        port = actionObject.virtualNode.getPortNumber(actionObject)
+        address = self._getVirtualNodeAddress_(actionObject.virtualNode)
+        payload = actionObject._getEncodedOutboundPacket_()
+        try:
+            startByte = {'unicast':72, 'multicast':138}[mode]
+        except:
+            notice(self, "Transmission mode '" + str(mode) + "' is not valid.")
+            return False
+        packetEncodeDictionary = {'_startByte_':startByte, '_address_':address, '_port_':port, '_payload_':payload} #establish the encode dictionary
+        encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
+        
+        #here is where a call to the downstream interface's transmit should get called
+        #also need to work out how to do synthetic node calls here.
+        
     class _receiveThread_(_interfaceThread_):
         pass
 

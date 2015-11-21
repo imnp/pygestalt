@@ -45,9 +45,9 @@ def notice(callingObject, noticeString):
         if name:    #name is not False (or None)
             print "[" + name + "] " + str(noticeString)   #print "name: message"
         else:   #name is False or None
-            print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
+            print "[" + str(callingObject) + "] " + str(noticeString) #print objectRepr: message
     else:
-        print "[" + str(callingObjet) + "] " + str(noticeString) #print objectRepr: message
+        print "[" + str(callingObject) + "] " + str(noticeString) #print objectRepr: message
 
 
 def unsignedIntegerToBytes(integer, numbytes):
