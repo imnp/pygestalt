@@ -60,8 +60,11 @@ class actionObject(object):
         self._outboundPacketDictionary_ = {}    #stores key:value pairs to be encoded by _encodeOutboundPacket_
         self._inboundPacketDictionary_ = {} #stores key:value pairs decoded by _decodeAndSetInboundPacket_
         
+        self._committedFlag_ = False #Indicates that the actionObject has been committed to the channel priority queue
         self._clearForReleaseFlag_ = threading.Event() #Indicates that the actionObject can be released from the channel priority queue and await transmission
         self._channelAccessGrantedFlag_ = threading.Event() #Indicates that the actionObject has been granted access to the channel in order to transmit
+        
+        self._channelAccessLock_ = None     #On channel access this will be set to the channel access lock object (provided by the interface) by _grantChannelAccess_
         
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
         """actionObject subclass's initialization routine.
@@ -98,9 +101,14 @@ class actionObject(object):
 
     def commit(self):
         """Places this actionObject in its virtualNode interface's channel priority queue."""
+        self._committedFlag_ = True     #record that actionObject has been committed
         self.virtualNode._interface_.commitToChannelPriorityQueue(self)
         return True
  
+    def _isCommitted_(self):
+        """Returns committedFlag, indicating that this actionObject has been committed to the channel priority queue."""
+        return self._committedFlag_
+    
     def clearForRelease(self):
         """Flags the actionObject as clear to release from the channel priority queue.
         
@@ -109,14 +117,31 @@ class actionObject(object):
         self._clearForReleaseFlag_.set() #set the clear to release flag
         return True
     
-    def isClearForRelease(self):
+    def _isClearForRelease_(self):
         """Returns True if the actionObject has been cleared for release from the channel priority queue."""
         return self._clearForReleaseFlag_.is_set()
     
-    def transmit(self, mode = 'unicast'):
+    def _grantChannelAccess_(self, channelAccessLock = None):
+        """Grants the actionObject access to its interface's transmission channel.
+        
+        channelAccessLock -- a threading.lock object that must be released by the actionObject when done using the channel.
+        
+        Note that if the lock object is not released, transmission will block on the interface indefinitely. The transmit function will automatically release
+        the channel access lock unless explicitly directed not to.
+        """
+        self._channelAccessLock_ = channelAccessLock    #store a ref to the channel access lock
+        self.onChannelAccess()  #call the user-defined onChannelAccess method
+        self._channelAccessGrantedFlag_.set()   #set the channel access flag, to indicate to another thread that the actionObject has channel access
+    
+    def onChannelAccess(self):
+        """User-overrridden optional method that gets called when the node receives channel access."""
+        pass
+    
+    def transmit(self, mode = 'unicast', releaseChannelOnReturn = True):
         """Transmits packet on the virtualNode's interface.
         
         mode -- the transmission mode, either 'unicast to direct at a single node, or 'multicast' to direct at all nodes.
+        releaseChannelOnReturn -- If True (default), will automatically release the actionObject's channel lock after transmission
         
         *Add description here as build out priority and channel access queues.
         """

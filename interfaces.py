@@ -162,7 +162,7 @@ class gestaltInterface(baseInterface):
             pass
     
     class _channelPriorityThread_(_interfaceThread_):
-        """Manages actionObjects that are queued for release to the channel acess thread.
+        """Manages actionObjects that are queued for release to the channel access thread.
         
         The first step in an actionObject's winding path towards transmitting its packet is the channel priority queue. While in this
         queue, actionObjects can still be modified, but the order in which they are queued cannot be changed. This permits features
@@ -185,11 +185,12 @@ class gestaltInterface(baseInterface):
             while True: #repeat forever
                 pending, actionMolecule = self.getActionMolecule() #get the next actionObject (or actionSet, or actionSequence) from the queue.
                 if pending: #an actionMolecule is waiting in the queue
-                    while not actionMolecule.isClearForRelease():    #wait for the actionMolecule to be cleared for release from the queue
+                    while not actionMolecule._isClearForRelease_():    #wait for the actionMolecule to be cleared for release from the queue
                         time.sleep(self.interface._threadIdleTime_)  #idle
                     for actionObject in self.serializeActionMolecule(actionMolecule):   #serialize actionMolecule into actionObjects, and iterate over them
                         self.releaseActionObject(actionObject)  #put actionObject into the channel access queue
-                time.sleep(self.interface._threadIdleTime_) #idle
+                else:
+                    time.sleep(self.interface._threadIdleTime_) #idle
                 
         def getActionMolecule(self):
             """Attempts to pull an actionMolecule from the channel priority queue.
@@ -210,7 +211,6 @@ class gestaltInterface(baseInterface):
             form of actionSets and actionSequences.
             """
             self.channelPriorityQueue.put(actionMolecule)
-            print "PUT " + str(actionMolecule)
             return True
         
         def releaseActionObject(self, actionObject):
@@ -218,8 +218,7 @@ class gestaltInterface(baseInterface):
             
             actionObject -- the actionObject to be released
             """
-            print "RELEASED " + str(actionObject)
-#             self.interface._channelAccess_.putActionObject(actionObject)
+            self.interface._channelAccess_.putActionObject(actionObject)
             return True
         
         def serializeActionMolecule(self, actionMolecule):
@@ -231,7 +230,7 @@ class gestaltInterface(baseInterface):
             """
             return [actionMolecule]   #for now nothing fancy, assume only actionObjects are used.
     
-    def commitToChannelPriorityQueue(self, actionMolecule):
+    def commit(self, actionMolecule):
         """Adds the provided actionMolecule to the channelPriorityQueue
         
         actionMolecule -- the actionMolecule to be added to the queue.
@@ -239,7 +238,68 @@ class gestaltInterface(baseInterface):
         self._channelPriority_.putActionMolecule(actionMolecule)
     
     class _channelAccessThread_(_interfaceThread_):
-        pass
+        """Manages actionObjects that are waiting for access to the interface channel.
+        
+        Once an actionObject has been released from the channel priority queue, it sits in the channel access queue until
+        its turn to gain access to the channel. 
+        """
+        def init(self):
+            """Initialization routine for the channel access thread."""
+            self.channelAccessQueue = Queue.Queue() #instantiate a queue for holding actionObjects awaiting channel access.
+            self.channelAccessLock = threading.Lock()   #creates a lock object used to hand off access to an actionObject
+            self.channelAccessLock.acquire()    #lock the lock object
+        
+        def run(self):
+            """The channel access thread loop.
+            
+            Once an actionObject has been released into the channel access thread, it waits for the opportunity to access
+            the channel. Upon access, the actionObject has complete control to send whatever it wants over the channel.
+            This is slightly counter-intuitive at first, since it is the actionObject that controls the transmission
+            rather than it occuring here. However this gives more flexibility to the designer of the actionObject.
+            There are two primary patterns for how actionObjects will transmit. One is that they are blocking main program execution
+            on their transmission, which makes sense for a function that e.g. needs a real-world sensor measurement in order to continue.
+            The other pattern is that transmission occurs automatically on channel access while program execution occurs in parallel.
+            Blocking behavior is supported by setting a flag triggering action in the main thread, and automatic transmission is 
+            initiated by a call in this thread to the actionObject's grantAccess function.
+            """
+            while True:
+                pending, actionObject = self.getActionObject()  #get the next action object from the queue
+                if pending:
+                    self.grantChannelAccess(actionObject)      #grant channel access to the actionObject
+                    self.channelAccessLock.acquire()    #wait for actionObject to release the channel before continuing
+                else:
+                    time.sleep(self.interface._threadIdleTime_) #idle
+        
+        def getActionObject(self):
+            """Attempts to pull an actionObject from the channel access queue.
+            
+            Returns (True, actionObject) if an actionObject was waiting in the queue, or (False, None) if not.
+            """
+            try:
+                return True, self.channelAccessQueue.get(block = False)    #signal success, return actionMolecule
+            except Queue.Empty:
+                return False, None  #signal failure, return None            
+            
+        def putActionObject(self, actionObject):
+            """Places actionObjects into the channel access queue.
+            
+            actionObject -- the actionObject to place into the queue.
+            """
+            self.channelAccessQueue.put(actionObject)
+            return True
+       
+  
+        def grantChanelAccess(self, actionObject):
+            """Grants interface channel access to an actionObject.
+                
+            actionObject -- the action object which should be granted access.
+            
+            Granting channel access accomplishes three purposes:
+            1) Notifies the actionObject that it has control of the channel.
+            2) Transfers the channel access lock to the actionObject, who will release when done.
+            3) Will run any immediate transmission routine in the current thread.
+            """
+            actionObject._grantChannelAccess_(self.channelAccessLock)    #grant channel access to the actionObject, and pass along the access lock                
     
     class _receiveThread_(_interfaceThread_):
         pass
