@@ -8,7 +8,7 @@ import threading, Queue
 import time
 import imp, os, urllib  #for importing files
 import copy
-from pygestalt import core, packets, utilities, interfaces
+from pygestalt import core, packets, utilities, interfaces, config
 from pygestalt.utilities import notice
 
 class baseVirtualNode(object):
@@ -76,9 +76,19 @@ class baseGestaltNode(baseVirtualNode):
             self._interface_ = None
         
         if "_shell_" in kwargs:
-            self._shell_ = kwargs.pop("_shell_")
+            self._shell_ = kwargs.pop("_shell_")        #if provided, this virtual node has a node shell
         else:
             self._shell_ = None
+            
+        if "synthetic" in kwargs:
+            syntheticArg = kwargs.pop("synthetic")     #synthetic argument has been provided.
+        else:
+            syntheticArg = False    #no synthetic argument provided, default to false
+        
+        if syntheticArg == True:    #now that syntheticArg is guaranteed to exist, check if True, and if so, put node in synthetic mode
+            self._syntheticMode_ = True
+        else:
+            self._syntheticMode_ = False
             
         #-- Initialization--
         utilities.callFunctionAcrossMRO(self, "init", args, kwargs)
@@ -149,6 +159,17 @@ class baseGestaltNode(baseVirtualNode):
         if newAddress: #A new address was provided, therefor must associate
             self.setAddressRequest(newAddress) #set node address to newAddress
                 
+    def _isInSyntheticMode_(self):
+        """Checks if the node is running in synthetic mode.
+        
+        Synthetic mode means that the node will synthesize responses as if coming from a physical node. This mode is useful
+        for debugging the control system when actual hardware is not avaliable. The node can be placed in synthetic mode in several ways:
+        1) synthetic = True is passed as an argument to the node on instantiation
+        2) pygestalt.config.synthetic = True
+        
+        Returns True if the node is running in synthetic mode, otherwise returns False.
+        """
+        return (config.syntheticMode() or self._syntheticMode_) #list all checks here
 
     def _updateVirtualNode_(self, args = (), kwargs = {}):
         """Attempts to replace virtual node instance residing inside _shell_ (e.g. self) with an updated version as referenced by the physical node's URL.

@@ -4,6 +4,7 @@ from pygestalt import packets
 from pygestalt import utilities
 from pygestalt import core
 from pygestalt import nodes
+from pygestalt import config
 import copy
 import time
 
@@ -71,7 +72,7 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 # x = getTuna('charlie')
 # print x
 
-
+config.syntheticModeOn()    #turn on synthetic mode
 
 # # The code below tests whether actionObject classes are being copied
 
@@ -81,7 +82,6 @@ myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 
 print myGestaltNode.statusRequest()
  
-myGestaltNode.identifyRequest()
 print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
 print myGestaltNode.bootReadRequest(pageNumber = 127)
 print myGestaltNode.urlRequest()

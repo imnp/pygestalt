@@ -331,7 +331,8 @@ class gestaltInterface(baseInterface):
         packetEncodeDictionary = {'_startByte_':startByte, '_address_':address, '_port_':port, '_payload_':payload} #establish the encode dictionary
         encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
         
-        self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
+        if actionObject.virtualNode._isInSyntheticMode_():   #return a synthetic response
+            self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
         #here is where a call to the downstream interface's transmit should get called
         #also need to work out how to do synthetic node calls here.
         
