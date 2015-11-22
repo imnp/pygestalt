@@ -320,7 +320,7 @@ class gestaltInterface(baseInterface):
         
         returns True if successful, or False if an error is encountered
         """
-        port = actionObject.virtualNode.getPortNumber(actionObject)
+        port = actionObject.virtualNode._getPortNumber_(actionObject)
         address = self._getAddressOfVirtualNode_(actionObject.virtualNode)
         payload = actionObject._getEncodedOutboundPacket_()
         try:
@@ -362,9 +362,10 @@ class gestaltInterface(baseInterface):
                     decodedOutboundPacket = self.interface._gestaltPacket_.decode(encodedOutboundPacket)[0]    #decode the outgoing packet
                     outboundPayload = decodedOutboundPacket['_payload_']  #get the outbound payload from the decoded outbound packet
                     syntheticInboundPayload = syntheticResponseFunction(outboundPayload) #generate an encoded inbound payload
-                    decodedSyntheticInboundPacket = copy.copy(decodedOutboundPacket)    #make a copy of the decoded outbound packet to use as an inbound packet
-                    decodedSyntheticInboundPacket.update({'_payload_':syntheticInboundPayload}) #swap the outbound payload for the new synthetized payload
-                    self.interface._packetRouter_.putDecodedPacket(decodedSyntheticInboundPacket)   #put the decoded inbound packet into the packet router queue
+                    if syntheticInboundPayload != None: #a synthetic payload was provided by the node
+                        decodedSyntheticInboundPacket = copy.copy(decodedOutboundPacket)    #make a copy of the decoded outbound packet to use as an inbound packet
+                        decodedSyntheticInboundPacket.update({'_payload_':syntheticInboundPayload}) #swap the outbound payload for the new synthetized payload
+                        self.interface._packetRouter_.putDecodedPacket(decodedSyntheticInboundPacket)   #put the decoded inbound packet into the packet router queue
                 else:
                     time.sleep(self.interface._threadIdleTime_) #idle
 

@@ -4,7 +4,7 @@
 
 
 #---- INCLUDES ----
-import threading
+import threading, Queue
 import time
 import imp, os, urllib  #for importing files
 import copy
@@ -202,7 +202,7 @@ class baseGestaltNode(baseVirtualNode):
         Note that the parameter names contain the reference "function" strictly for the benefit of the user, since in practice they behave like functions.
         """
         
-        inboundPacketFlag = threading.Event()    #This flag will be used to signal to an outbound function that a reply has been received.
+        inboundPacketFlagQueue =  Queue.Queue()   #This queue is used to store an actionObject that should be flagged when a reply has been received.
         
         #GENERATE actionObject CLASSES
         if outboundFunction != None:    #an outbound function has been provided
@@ -232,8 +232,8 @@ class baseGestaltNode(baseVirtualNode):
             inboundTemplate = packets.emptyTemplate(templateName)
         
         #STORE PARAMETERS IN actionObject CLASSES
-        outboundActionObjectClass._inboundPacketFlag_ = inboundPacketFlag #store inbound packet flag
-        inboundActionObjectClass._inboundPacketFlag_ = inboundPacketFlag
+        outboundActionObjectClass._inboundPacketFlagQueue_ = inboundPacketFlagQueue #store a reference to inbound packet flag queue
+        inboundActionObjectClass._inboundPacketFlagQueue_ = inboundPacketFlagQueue
         
         outboundActionObjectClass._outboundTemplate_ = outboundTemplate #store outbound packet template
         inboundActionObjectClass._outboundTemplate_ = outboundTemplate
@@ -276,7 +276,7 @@ class baseGestaltNode(baseVirtualNode):
         self.__dict__.update({typeName:newType})
         return newType
     
-    def getPortNumber(self, actionObject):
+    def _getPortNumber_(self, actionObject):
         """Returns the port to which a provided actionObject is bound.
         
         actionObject -- the action object to look up in the node's outbound port table.
@@ -288,7 +288,7 @@ class baseGestaltNode(baseVirtualNode):
             notice(self, "actionObject type " + str(type(actionObject)) + "is not bound to this node.")
             return False
     
-    def getActionObjectFromPortNumber(self, portNumber):
+    def _getInboundActionObjectFromPortNumber_(self, portNumber):
         """Returns the actionObject type that is bound to an input port number.
         
         portNumber -- the port number of the actionObject to be returned
@@ -305,9 +305,18 @@ class baseGestaltNode(baseVirtualNode):
         port -- the port of the target actionObject type
         packet -- a serialized payload packet aimed at the target actionObject type
         """
-        actionObjectClass = getActionObjectFromPortNumber(port) #get the actionObject class
+        actionObjectClass = self._getInboundActionObjectFromPortNumber_(port) #get the actionObject class
+        #make a call to the inbound action object first
+        inboundActionObject = actionObjectClass()   #instantiate a new inbound action object
+        inboundActionObject._decodeAndSetInboundPacket_(packet) #provides packet to the inbound action object
+        inboundActionObject.onReceive() #run the inbound action object's onReceive method now that packet has been provided
         
+        outboundActionObject = actionObjectClass._getActionObjectFromInboundPacketFlagQueue_()  #attepts to retrieve an actionObject instance from the class's inboundPacketFlagQueue
+        if outboundActionObject:
+            outboundActionObject._decodeAndSetInboundPacket_(packet)    #store decoded packet in the outbound actionObject instance
+            outboundActionObject._inboundPacketFlag_.set()  #set flag on outbound actionObject instance to indicate that a packet has been received
         
+        return True
         
 class gestaltNode(baseGestaltNode):
     """The standard Gestalt node class.
@@ -486,7 +495,7 @@ class gestaltNode(baseGestaltNode):
             appValidity -- True if application firmware is valid, False if app firmware isn't valid. This is determined
                             by checking if the magic number returned by the node is equal to 170.
             """
-            if self.transmitUntilReply():   #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+            if self.transmitUntilResponse():   #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
                 receivedData = self.getPacket()
                 status = receivedData['status']
                 appValid = (receivedData['appValidity'] == 170)
@@ -515,7 +524,7 @@ class gestaltNode(baseGestaltNode):
             responseSet = {'bootloaderStarted':5, 'applicationStarted':9 }    #response options and corresponding firmware-defined values received from node.
             if command in commandSet:   #provided command is valid
                 self.setPacket(commandCode = commandSet[command])
-                if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+                if self.transmitUntilResponse(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
                     responseCode = self.getPacket()['responseCode'] #pull response code from packet
                     if command == 'startBootloader' and responseCode == responseSet['bootloaderStarted']: #received valid reply to startBootloader command
                         return True
@@ -554,7 +563,7 @@ class gestaltNode(baseGestaltNode):
             Returns True if successful, False if unsuccessful.
             """
             self.setPacket(commandCode = 2, pageNumber = pageNumber, writeData = data)
-            if self.transmitUntilReply():  #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+            if self.transmitUntilResponse():  #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
                 returnPacket = self.getPacket()
                 if returnPacket['responseCode'] == 1:   #valid response code is hardcoded in the firmware
                     return returnPacket['pageNumber']   #response is valid, return page number as provided by the physical node
@@ -585,7 +594,7 @@ class gestaltNode(baseGestaltNode):
             Returns a list containing the page data if successful, or False if not.
             """
             self.setPacket(pageNumber = pageNumber)
-            if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+            if self.transmitUntilResponse(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
                 return self.getPacket()['readData'] #return memory page
             else:
                 notice(self.virtualMachine, "No response received to page write request.")
@@ -604,7 +613,7 @@ class gestaltNode(baseGestaltNode):
             
             Returns the URL string provided by the node.
             """
-            if self.transmitUntilReply(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
+            if self.transmitUntilResponse(): #transmit to the physical node, with multiple attempts until a reply is received. Default timeout and # of attempts.
                 return self.getPacket()['URL']
             else:
                 notice(self.virtualNode, 'No URL received.')
@@ -635,7 +644,7 @@ class gestaltNode(baseGestaltNode):
             Returns URL from target node.
             """
             self.setPacket(setAddress = address)
-            if self.transmitUntilReply(mode = 'multicast', timeout = 15):   #transmit to all nodes with multiple attempts seperated by a 15 sec. timeout until reply is received
+            if self.transmitUntilResponse(mode = 'multicast', timeout = 15):   #transmit to all nodes with multiple attempts seperated by a 15 sec. timeout until reply is received
                 return self.getPacket()['URL']                              #Note that the prolonged timeout gives the user time to press a button on the target node.
             else:
                 notice(self.virtualNode, 'PHYSICAL NODE WAS NOT IDENTIFIED')

@@ -28,7 +28,7 @@ class actionObject(object):
     #Explicitly define class parameters here. These get set to real values when the actionObject is bound to a port by
     #nodes.baseGestaltNode.bindPort(). In reality these aren't overwritten but act as fallbacks that are superseded by derived class attributes.
     
-    _inboundPacketFlag_ = None  #Note that this flag is set dynamically, so need to be careful about which instance is monitoring it.
+    _inboundPacketFlagQueue_ = None  #Note that this flag is set dynamically, so need to be careful about which instance is monitoring it.
     _outboundTemplate_ = None
     _inboundTemplate_ = None
     _baseActionObject_ = None
@@ -66,6 +66,8 @@ class actionObject(object):
         self._channelAccessGrantedFlag_ = threading.Event() #Indicates that the actionObject has been granted access to the channel in order to transmit
         
         self._channelAccessLock_ = None     #On channel access this will be set to the channel access lock object (provided by the interface) by _grantChannelAccess_
+        
+        self._inboundPacketFlag_ = threading.Event()
         
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
         """actionObject subclass's initialization routine.
@@ -169,8 +171,27 @@ class actionObject(object):
             notice(self, "actionObject has no valid channel access lock on call to _releaseChannelAccessLock_")
             notice(self, "Instead channel access lock type is " + str(type(self._channelAccessLock_)))
             return False
-                
+    
+    @classmethod
+    def _putActionObjectIntoInboundPacketFlagQueue_(cls, actionObject):
+        """Swaps a provided actionObject into the inbound packet flag queue.
         
+        actionObject -- the action object to be placed into the inbound packet flag queue.
+        
+        Note that although a queue is used, only one actionObject resided there at a time. Its occupant will be signaled when a packet is received.
+        """
+        cls._getActionObjectFromInboundPacketFlagQueue_()  #pulls any still-resident actionObject from the queue
+        cls._inboundPacketFlagQueue_.put(actionObject) #put the provided actionObject into the queue
+        return True
+        
+    @classmethod
+    def _getActionObjectFromInboundPacketFlagQueue_(cls):
+        """If avaliable, returns an actionObject from the inbound packet flag queue."""
+        try:
+            return cls._inboundPacketFlagQueue_.get(block=False)  #pulls an actionObject from the inboundPacketFlagQueue
+        except:
+            return False
+    
     def transmit(self, mode = 'unicast', releaseChannelOnTransmit = True):
         """Transmits packet on the virtualNode's interface.
         
@@ -179,6 +200,7 @@ class actionObject(object):
         """
         
         if self.channelAccessIsGranted():   #very likely that transmit has been called from within an onChannelAccess function, since access is avaliable immediately
+            self._putActionObjectIntoInboundPacketFlagQueue_(self)  #put a reference to self in the inbound packet flag queue
             self.virtualNode._interface_.transmit(actionObject = self, mode = mode)  #pass actionObject to interface for transmission
             if releaseChannelOnTransmit:  #check if should release the channel lock after transmission
                 self._releaseChannelAccessLock_()  #release the channel access lock
@@ -189,17 +211,17 @@ class actionObject(object):
             if not self._isClearForRelease_():   #check if actionObject is cleared for release from the channel priority queue
                 self.clearForRelease()  #clear actionObject for release from the channel priority queue
             if self.waitForChannelAccess(): #wait for channel access
+                self._putActionObjectIntoInboundPacketFlagQueue_(self)  #put a reference to self in the inbound packet flag queue
                 self.virtualNode._interface_.transmit(actionObject = self, mode = mode) #transmit on interface
+                if releaseChannelOnTransmit:    #check if should release the channel access lock
+                    self._releaseChannelAccessLock_()   #release the channel access lock
             else:
                 notice(self, "timed out waiting for channel access")    #timed out!
                 return False
-            
-        ###The following code should get replaced... just for fleshing out the synthetic functions for now!
-        self._decodeAndSetInboundPacket_(self._synthetic_(self._getEncodedOutboundPacket_()))   #directly connects transmit to synthetic
         return True        
     
-    def transmitUntilReply(self, timeout = 0.2, mode = 'unicast', attempts = 10):
-        """Persistently transmits until a reply is received from the node.
+    def transmitUntilResponse(self, timeout = 0.2, mode = 'unicast', attempts = 10):
+        """Persistently transmits until a response is received from the node.
         
         timeout -- the time (in seconds) to wait for a reply between re-attempts
         mode -- the transmission mode, either 'unicast' to direct at a single node, or 'multicast' to direct at all nodes
@@ -208,9 +230,24 @@ class actionObject(object):
         This is an area in which to potentially improve Gestalt, by building in some functionality that
         can identify and respond intelligently to when a node goes down.
         """
-        self.transmit(mode = mode, releaseChannelOnTransmit = False)
-        self._releaseChannelAccessLock_()
-        return True
+        for thisAttempt in range(attempts): #make multiple attempts to receive a response
+            self.transmit(mode = mode, releaseChannelOnTransmit = False)
+            if self.waitForResponse(timeout):   #a response was received!
+                self._releaseChannelAccessLock_()   #release access to the channel
+                return True
+            else:
+                notice(self, "Could not reach virtual node. Retrying (#" + str(thisAttempt+2) + "/"+str(attempts)+")")
+                continue
+        #could not reach node if got to here
+        self._releaseChannelAccessLock_()   #release access to the channel
+        return False
+
+    def waitForResponse(self, timeout = None):
+        if self._inboundPacketFlag_.wait(timeout = timeout):    #inbound packet flag is set
+            self._inboundPacketFlag_.clear()    #clear the flag
+            return True     #return True to indicate that flag was set
+        else:   #timeout has elapsed without flag being set
+            return False
 
     def _synthetic_(self, toSyntheticNodeSerializedPacket):
         """Internal function that encodes and decodes packets en-route to user-provided synthetic service routine to support operation without physical nodes attached.
@@ -238,6 +275,15 @@ class actionObject(object):
         Otherwise returns a dictionary of values to get encoded and sent back to the virtual node.
         """
         return None
+    
+    def onReceive(self):
+        """Default function to handle an asynchronously received inbound packet.
+        
+        This function will get called by the virtual node's _routeInboundPacket_ method. Note that very often this function will NOT be called in the same
+        actionObject instance that transmitted, but rather a new actionObject that was instantiated by the virtual node's _routeInboundPacket_ method.
+        """
+        pass
+    
 #--- GENERIC ACTION OBJECTS ---
 class genericActionObject(actionObject):
     """A perfectly generic actionObject type."""

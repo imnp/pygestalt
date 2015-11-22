@@ -81,6 +81,7 @@ myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 
 print myGestaltNode.statusRequest()
  
+myGestaltNode.identifyRequest()
 print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
 print myGestaltNode.bootReadRequest(pageNumber = 127)
 print myGestaltNode.urlRequest()
