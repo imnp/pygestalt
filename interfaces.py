@@ -126,8 +126,9 @@ class gestaltInterface(baseInterface):
         """
         self._channelPriority_ = self._startThreadAsDaemon_(self._channelPriorityThread_)
         self._channelAccess_ = self._startThreadAsDaemon_(self._channelAccessThread_)
-        self._packetRouter_ = self._startThreadAsDaemon_(self._packetRouterThread_)
+        self._syntheticResponse_ = self._startThreadAsDaemon_(self._syntheticResponseThread_)
         self._receiver_ = self._startThreadAsDaemon_(self._receiveThread_)
+        self._packetRouter_ = self._startThreadAsDaemon_(self._packetRouterThread_)
 
 
     def _startThreadAsDaemon_(self, threadClass):
@@ -276,7 +277,7 @@ class gestaltInterface(baseInterface):
             Returns (True, actionObject) if an actionObject was waiting in the queue, or (False, None) if not.
             """
             try:
-                return True, self.channelAccessQueue.get(block = False)    #signal success, return actionMolecule
+                return True, self.channelAccessQueue.get(block = False)    #signal success, return actionObject
             except Queue.Empty:
                 return False, None  #signal failure, return None            
             
@@ -301,7 +302,7 @@ class gestaltInterface(baseInterface):
             """
             actionObject._grantChannelAccess_(self.channelAccessLock)    #grant channel access to the actionObject, and pass along the access lock                
     
-    def _getVirtualNodeAddress_(self, virtualNode):
+    def _getAddressOfVirtualNode_(self, virtualNode):
         """Returns the address of a provided virtual node.
         
         virtualNode -- the virtualNode instance whose address needs to be looked up.
@@ -320,7 +321,7 @@ class gestaltInterface(baseInterface):
         returns True if successful, or False if an error is encountered
         """
         port = actionObject.virtualNode.getPortNumber(actionObject)
-        address = self._getVirtualNodeAddress_(actionObject.virtualNode)
+        address = self._getAddressOfVirtualNode_(actionObject.virtualNode)
         payload = actionObject._getEncodedOutboundPacket_()
         try:
             startByte = {'unicast':72, 'multicast':138}[mode]
@@ -330,12 +331,119 @@ class gestaltInterface(baseInterface):
         packetEncodeDictionary = {'_startByte_':startByte, '_address_':address, '_port_':port, '_payload_':payload} #establish the encode dictionary
         encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
         
+        self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
         #here is where a call to the downstream interface's transmit should get called
         #also need to work out how to do synthetic node calls here.
         
+    class _syntheticResponseThread_(_interfaceThread_):
+        """Generates synthetic inbound packets to simulate responses from physical nodes for development purposes.
+        
+        The purpose of this thread is to simulate the communications behavior of a physical node combined with the receiver thread.
+        This is accomplished by the following process:
+        1) A tuple of format (encodedOutboundPacket, syntheticResponseFunction) is placed into the synthetic response queue by the putInSyntheticQueue method.
+        2) The encodedOutboundPacket will be decoded here to retrieve the outbound payload
+        3) This thread will call syntheticResponseFunction - typically the _synthetic_ method of an actionObject - with the outbound payload as an argument.
+        4) syntheticResponseFunction will return an encoded response payload.
+        5) The response payload is placed back in the decoded outbound packet dictionary, which is then passed along to the packet router thread as if it had
+            just been received. NOTE: as currently implemented, synthetic responses can only be directed at the same node and calling port from which the
+            outbound packet originated.
+        """
+        def init(self):
+            """Synthetic node thread initialization method."""
+            self.syntheticResponseQueue = Queue.Queue()
+        
+        def run(self):
+            """Synthetic response thread loop."""
+            while True:
+                pending, syntheticTuple = self.getSyntheticTuple()  #get from the queue the next tuple containing information to generate a synthetic packet
+                if pending: #a tuple was waiting
+                    #TODO: handle multicast packets
+                    encodedOutboundPacket, syntheticResponseFunction = syntheticTuple   #break apart stored tuple
+                    decodedOutboundPacket = self.interface._gestaltPacket_.decode(encodedOutboundPacket)[0]    #decode the outgoing packet
+                    outboundPayload = decodedOutboundPacket['_payload_']  #get the outbound payload from the decoded outbound packet
+                    syntheticInboundPayload = syntheticResponseFunction(outboundPayload) #generate an encoded inbound payload
+                    decodedSyntheticInboundPacket = copy.copy(decodedOutboundPacket)    #make a copy of the decoded outbound packet to use as an inbound packet
+                    decodedSyntheticInboundPacket.update({'_payload_':syntheticInboundPayload}) #swap the outbound payload for the new synthetized payload
+                    self.interface._packetRouter_.putDecodedPacket(decodedSyntheticInboundPacket)   #put the decoded inbound packet into the packet router queue
+                else:
+                    time.sleep(self.interface._threadIdleTime_) #idle
+
+        def getSyntheticTuple(self):
+            """Attempts to pull a tuple from the synthetic response queue.
+            
+            Returns (True, tuple) if a tuple was waiting in the queue, or (False, None) if not.
+            """
+            try:
+                return True, self.syntheticResponseQueue.get(block = False)    #signal success, return tuple
+            except Queue.Empty:
+                return False, None  #signal failure, return None            
+            
+        def putInSyntheticQueue(self, encodedPacket, syntheticResponseFunction):
+            """Places objects into the synthetic response queue.
+            
+            encodedPacket -- a fully encoded packet just as it would be transmitted
+            syntheticResponseFunction -- the function that will be used to generate a synthetic response, typically of type actionObject._synthetic_
+            """
+            self.syntheticResponseQueue.put((encodedPacket, syntheticResponseFunction))
+            return True
+                 
+    
     class _receiveThread_(_interfaceThread_):
         pass
 
-    class _packetRouterThread_(_interfaceThread_):
-        pass
+    def _getVirtualNodeFromAddress_(self, address):
+        """Returns the virtual node whose address matches a provided value.
         
+        address -- the virtual node address to be looked up.
+        """
+        if address in self._addressNodeTable_:  #check that a virtual node matches the provided address
+            return self._addressNodeTable_[address] #returns the matching node
+        else:
+            return False    #address does not map to a node, return False
+        
+
+    class _packetRouterThread_(_interfaceThread_):
+        """Routes incoming packets to their destination virtual node.
+        
+        When a packet has been successfully received, it is transfered to the packet router thread to be routed to a destination node.
+        The node will then instantiate an actionObject according to its port binding table and call its onReceive method, and will also set an inboundPacketFlag on the
+        destination actionObject class. The onReceive method is called in the packet router thread, whereas the inboundPacketFlag may be read and acted upon by a
+        different thread.
+        """
+        def init(self):
+            """Packet router thread initialization method."""
+            self.routerQueue = Queue.Queue()    #create a packet router queue.
+        
+        def run(self):
+            """Packet router loop.
+            
+            Note that inbound packets are pulled from the queue already decoded (this was done in the receive thread to validate the checksum).
+            """
+            while True:
+                pending, decodedPacket = self.getDecodedPacket()  #get the next decoded packet from the queue
+                if pending: #a packet was waiting
+                    destinationAddress = decodedPacket['_address_']
+                    destinationPort = decodedPacket['_port_']
+                    payload = decodedPacket['_payload_']
+                    virtualNode = self.interface._getVirtualNodeFromAddress_(destinationAddress)    #look up virtual node that matches the packet's address
+                    virtualNode._routeInboundPacket_(port = destinationPort, packet = payload) #call the virtual node's packet router method
+                else:
+                    time.sleep(self.interface._threadIdleTime_) #idle
+
+        def putDecodedPacket(self, decodedPacket):
+            """Places decoded packet dictionaries into the router queue.
+            
+            decodedPacket -- the decoded packet dictionary to place into the queue.
+            """
+            self.routerQueue.put(decodedPacket)
+            return True
+                    
+        def getDecodedPacket(self):
+            """Attempts to pull a decoded packet dictionary from the router queue.
+            
+            Returns (True, decodedPacket) if a decoded packet dictionary was waiting in the queue, or (False, None) if not.
+            """
+            try:
+                return True, self.routerQueue.get(block = False)    #signal success, return decoded packet
+            except Queue.Empty:
+                return False, None  #signal failure, return None  

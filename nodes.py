@@ -287,6 +287,27 @@ class baseGestaltNode(baseVirtualNode):
         else:
             notice(self, "actionObject type " + str(type(actionObject)) + "is not bound to this node.")
             return False
+    
+    def getActionObjectFromPortNumber(self, portNumber):
+        """Returns the actionObject type that is bound to an input port number.
+        
+        portNumber -- the port number of the actionObject to be returned
+        """
+        if portNumber in self._inboundPortTable_:
+            return self._inboundPortTable_[portNumber]
+        else:
+            notice(self, "No actionObject type is bound to port number " + str(portNumber) + " on this node.")
+            return False
+        
+    def _routeInboundPacket_(self, port, packet):
+        """Decodes and routes an inbound packet to an actionObject type in the virtual node.
+        
+        port -- the port of the target actionObject type
+        packet -- a serialized payload packet aimed at the target actionObject type
+        """
+        actionObjectClass = getActionObjectFromPortNumber(port) #get the actionObject class
+        
+        
         
 class gestaltNode(baseGestaltNode):
     """The standard Gestalt node class.
