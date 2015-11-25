@@ -5,6 +5,7 @@ from pygestalt import utilities
 from pygestalt import core
 from pygestalt import nodes
 from pygestalt import config
+from pygestalt import interfaces
 import copy
 import time
 
@@ -76,6 +77,10 @@ config.syntheticModeOn()    #turn on synthetic mode
 
 # # The code below tests whether actionObject classes are being copied
 
+serialInterface = interfaces.serialInterface('/dev/tty.usbserial-AH013FH0')
+time.sleep(10)
+exit()
+
 myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 # print myGestaltNode._virtualNode_
 # myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
@@ -97,4 +102,4 @@ print myGestaltNode
 #         print "myGestaltNode onLoad"
          
 
-time.sleep(2)
+time.sleep(10)

@@ -9,6 +9,7 @@ import Queue
 import time
 import copy
 import random   #for generating new addresses
+import serial
 from pygestalt import core, packets, utilities
 from pygestalt.utilities import notice
 
@@ -16,6 +17,113 @@ class baseInterface(object):
     """The base class for all interfaces in the Gestalt framework."""
     pass
 
+class serialInterface(baseInterface):
+    """The base class for all serial port interfaces."""
+    
+    def __init__(self, portName = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.2, flowControl = None):
+        """Initializes a serial communications port.
+        
+        portName -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
+        baudRate -- the communications speed to be used. Default is 115200 baud.
+        interfaceType -- a string keyword to help search for the port. Types include 'ftdi' 
+        name -- an optional name to provide to the interface
+        timeout -- the timeout in seconds on reading bytes from the port
+        flowControl -- TBD, can be used to enable hardware flow control, or to bring an Arduino into reset, once implemented.
+        """
+    
+        self.providedPortName = portName    #the name of the port provided on instantiation
+        self.portName = portName    #the name of the port last connected to. This can be automatically changed by the connect method
+        self.baudRate = baudRate
+        self.interfaceType = interfaceType
+        self._name_ = name
+        self.timeout = timeout
+        self.flowControl = flowControl
+        
+        self.port = None    #the currently connected port
+        self.isConnectedFlag = threading.Event()    #keeps track of current status of interface
+        self._threadIdleTime_ = 0.0005  #seconds, time for thread to idle between runs of loop
+        self._portReconnectTime_ = 5    #seconds, time between attempts to reconnect to a down port.
+        self.connect()
+    
+    def connect(self, portName = None):
+        """Connect to a serial port.
+        
+        portName -- the full name of the serial port to which to connect. If None, will attempt to connect to self.portName.
+        
+        This function will attempt to connect to either the provided port name, or the interface's self.portName. If a port is provided
+        as the input argument, and if connection is successful, self.portName will be updated to reflect the currently connected port.
+        """
+        if portName:
+            connectToPortName = portName    #use argument if provided
+        elif self.portName:
+            connectToPortName = self.portName   #default to interface's portName
+        
+        try:
+            self.port = serial.Serial(connectToPortName, self.baudRate, timeout = self.timeout) #Connect to the serial port
+            notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
+            self.port.flushInput()  #do some spring cleaning
+            self.port.flushOutput()
+            time.sleep(2)   #some ports require a brief amount of time between opening and transmission
+            self.isConnectedFlag.set() #sets the is connected flag
+            self.startTransmitter() #starts up the transmission thread
+            return True
+        except StandardError, error:
+            notice(self, "Error opening serial port " + str(connectToPortName))
+            notice(self, error) #report system-provided error.
+            return False
+    
+    def isConnected(self):
+        """Returns True if the isConnectedFlag is set, otherwise False."""
+        return self.isConnectedFlag.is_set()
+    
+    def startTransmitter(self):
+        """Starts up the transmitter thread."""
+        self.transmitter = self.transmitterThread(self)    #instantiate a transmitter thread
+        self.transmitter.daemon = True  #make transmitter thread a daemon so exits when program ends
+        self.transmitter.start()    #start up the transmitter!
+    
+    class transmitterThread(threading.Thread):
+        """This thread handles transmitting bytes over a serial port."""
+        def __init__(self, interface):
+            """Initializes the transmitter thread.
+            
+            interface -- a reference to the serialInterface instance in the context of which this thread runs.
+            """
+            threading.Thread.__init__(self) #initialize threading parent class
+            self.interface = interface  #a reference to serialInterface instance
+            self.transmitQueue = Queue.Queue()  #Use a queue to permit background transmission, and to allow multiple threads to access the interface.
+        
+        def run(self):
+            """Transmitter thread loop.
+            
+            New in this version of Gestalt, the thread attempts to reconnect to a port if connection is lost.
+            """
+            while True:
+                if self.interface.isConnected():    #check to make sure that the interface is connected
+                    pending, dataPacket = self.getDataFromTransmitQueue() #try to get data from the queue
+                    if pending:
+                        try:
+                            self.interface.port.write(utilities.serializeDataToString(dataPacket))
+                        except: #IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
+                            self.interface.port.isConnectedFlag.clear() #port is no longer connected
+                            notice(self, "Lost connection to serial port " + str(self.interface.portName))
+                        time.sleep(self.interface._threadIdleTime_) #idle
+                else:   #port isn't connected, attempt to reconnect
+                    time.sleep(self.interface._portReconnectTime_)
+                    self.interface.connect()    #attempt to reconnect         
+        
+        def getDataFromTransmitQueue(self):
+            """Attempts to pull a data packet from the transmit queue.
+            
+            Returns (True, dataPacket) if data is waiting in the queue to be transmitted, or (False, None) if not.
+            """
+            try:
+                return True, self.transmitQueue.get(block = False)    #signal success, return data
+            except Queue.Empty:
+                return False, None  #signal failure, return None        
+        
+        
+        
 class gestaltInterface(baseInterface):
     """Communicates with physical nodes that have implemented the Gestalt protocol."""
     
