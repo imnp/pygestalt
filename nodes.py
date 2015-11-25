@@ -146,7 +146,7 @@ class baseGestaltNode(baseVirtualNode):
                         newInterfaceName = self._name_+"GestaltInterface" #since the interface is dedicated to only one node, it's OK to use this node's name
                     else:
                         newInterfaceName = None #whoever is using the name will figure this out.
-                self._interface_ = interfaces.gestaltInterface(name = interfaceName, interface = self._interface_) #create a new gestalt interface
+                self._interface_ = interfaces.gestaltInterface(name = newInterfaceName, interface = self._interface_) #create a new gestalt interface
             else:
                 pass #use the provided interface
         else: #No interface provided

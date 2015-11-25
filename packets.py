@@ -105,7 +105,7 @@ class template(object):
         The checksum data is extracted from the packet, and the checksum token is used to calculate
         the checksum of the remainder of the packet. Then the provided and calculated checksums are compared.
         """
-        tokenStartIndex, tokenEndIndex, checksumToken = self.findTokenPosition(checksumName, inputPacket)   #locate checksum position in packet
+        tokenStartIndex, tokenEndIndex, checksumToken = self.findTokenPositionInPacket(checksumName, inputPacket)   #locate checksum position in packet
         providedChecksum = inputPacket[tokenStartIndex:tokenEndIndex][0] #isolate checksome value from packet. Comes in as list so pull integer.
         remainingPacket = inputPacket[:tokenStartIndex] + inputPacket[tokenEndIndex:] #strip out checksum value from packet
         calculatedChecksum = checksumToken.encode(encodeDict = {}, inProcessPacket = remainingPacket) #calculate checksum of remaining packet
@@ -217,7 +217,70 @@ class template(object):
         
         return decodeDict, workingPacket
     
-    def findTokenPosition(self, tokenName, inputPacket, forwardDecode = True):
+    def decodeTokenInIncompletePacket(self, tokenName, packet):
+        """Decodes a single named token in a provided potentially incomplete packet.
+        
+        tokenName -- the string name of the token to be decoded
+        packet -- the input packet in which to find and decode the token data
+        
+        This method is useful for receiver routines where some data encoded in the packet - e.g. packet length - is needed before the packet has been fully received.
+        Because the entire packet is incomplete, this method can only be used to get data for tokens that are accessible thru a forward pass, i.e. tokens that do
+        not fall past a token with a length that is not predetermined.
+        
+        Returns (decodeSuccess, decodedToken) where:
+        decodeSuccess -- a boolean that is True if the token was successfully found and decoded, or false otherwise
+        decodedToken -- the decoded data
+        """
+        index, token = self.findTokenPositionInTemplate(tokenName) #attempt to find the token in the packet
+        if token:   #a token was found
+            if len(packet) >= index + token.size:    #check if packet has sufficient length to fully decode the token
+                decodedTokenDict = token.decode(packet[index:])[0]  #decode the token, and take only the resulting dictionary
+                decodedValue = decodedTokenDict[tokenName]  #pull the desired token value from the decode dictionary
+                return True, decodedValue #return the decoded value
+            else:
+                return False, None  #insufficient length to decode
+        else:   #token not found
+            return False, None
+        
+        
+    def findTokenPositionInTemplate(self, tokenName):
+        """Locates a named token in the template and returns the start index of the token's data in a hypothetical packet.
+        
+        tokenName -- the string name of the token to be found
+        
+        Note that this function only works in the forwards direction, because without an input packet it is impossible to determine the position
+        of tokens that occur past a token without predetermined length. See findTokenPositionInPacket for additional functionality when the packet is
+        avaliable. The primary use of this method is for identifying the position of data in an incomplete packet.
+        
+        Returns (index, token) where:
+        index -- the beginning index of the data represented by the token, or the length of the template if not found, or None if encountered token without a predetermined length
+        token -- the token object whose name is proided by the tokenName input argument, or None if not found.
+        """
+        searchIndexPosition = 0
+        for token in self.template:            
+            if type(token) == template or type(token) == packetTemplate:    #the token is another template
+                foundIndex, foundToken = token.findTokenPositionInTemplate(tokenName)    #pass along the search to a child template
+                if foundToken:  #token was found in child template
+                    return searchIndexPosition + foundIndex, foundToken #return index, token
+                else:   #token wasn't found
+                    if foundIndex != None:  #token wasn't found, but didn't encounter any tokens of without a predetermined size
+                        self.searchIndexPosition += foundIndex
+                        continue
+                    else:   #token wasn't found, and encountered token without a predetermined size
+                        return None, None   #could not find token and encountered token wihtout a predetermined size
+            elif token.keyName == tokenName:  #found the token!
+                return searchIndexPosition, token   #return index, token
+            else:   #token doesn't match, and isn't a child template
+                if token.size < 1: #token size is not predetermined
+                    return None, None
+                else:   #token size is predetermined, add to current search index position and continue
+                    searchIndexPosition += token.size
+                    continue
+        
+        return searchIndexPosition, None    #Couldn't find token, so return size of template
+            
+            
+    def findTokenPositionInPacket(self, tokenName, inputPacket, forwardDecode = True):
         """Returns the index range that a referenced token spans in the input packet.
         
         tokenName -- the string name of the token to be found
@@ -253,7 +316,7 @@ class template(object):
                     tokenEndIndex = searchIndexPosition
                 
                 if type(token) == template or type(token) == packetTemplate: #the token is another template, forward on the search to it.
-                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPositionInPacket(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
                     tokenEndIndex = tokenStartIndex + searchEndIndex
                     tokenStartIndex += searchStartIndex
                     if searchToken != None: #Token found in embedded template!
@@ -288,7 +351,7 @@ class template(object):
                     tokenEndIndex = searchIndexPosition
                 
                 if type(token) == template or type(token) == packetTemplate: #the token is another template, forward on the search to it.
-                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPositionInPacket(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
                     tokenEndIndex = tokenStartIndex + searchEndIndex
                     tokenStartIndex += searchStartIndex
                     if searchToken != None: #Token found in embedded template!
@@ -310,7 +373,7 @@ class template(object):
                     tokenEndIndex = searchIndexPosition
                     
                 if type(token) == template or type(token) == packetTemplate:
-                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPosition(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
+                    searchStartIndex, searchEndIndex, searchToken = token.findTokenPositionInPacket(tokenName, workingPacket[tokenStartIndex:tokenEndIndex], forwardDecode)
                     tokenEndIndex = tokenStartIndex + searchEndIndex
                     tokenStartIndex += searchStartIndex
                     if searchToken != None: # Token found in embedded template
@@ -322,8 +385,6 @@ class template(object):
         #No token found!
         return 0, packetLength, None # return indices for the entire input packet
                     
-                                                    
-        
 
 class packetToken(object):
     """Base class for creating packet tokens, which are elements that handle encoding and decoding each segment of a packet."""
@@ -413,7 +474,7 @@ class unsignedInt(packetToken):
 
 class length(packetToken):
     """A length-of-packet integer token type."""
-    def init(self, size = 1, countSelf = False):
+    def init(self, size = 1, countSelf = True):
         """Initializes the length token.
         
         size -- the length in bytes of the token
@@ -428,7 +489,9 @@ class length(packetToken):
         
         inProcessPacket -- contains a second-pass in-process packet whose length should be measured.
         
-        NOTE: This assumes that there are not multiple length tokens in a single packet.
+        NOTES:  
+            -Assumes that there are not multiple length tokens in a single packet. 
+            -Because checksums are encoded last, they are not counted in the length value reported by this function.
         """
         
         if len(inProcessPacket)>0:  #an inProcess packet has been provided
@@ -584,12 +647,19 @@ class packetTemplate(packetToken):
         """
         return self.template.decode(inputPacket, forwardDecode)
     
-    def findTokenPosition(self, tokenName, inputPacket, forwardDecode = True):
+    def findTokenPositionInTemplate(self, tokenName):
         """Returns the index range that a referenced token spans in the input packet.
         
         As with the other functions in this class, just forwards the request on to the child template.
+        """        
+        return self.template.findTokenPositionInTemplate(tokenName)
+    
+    def findTokenPositionInPacket(self, tokenName, inputPacket, forwardDecode = True):
+        """Locates a named token in the template and returns the start index of the token's data in a hypothetical packet.
+        
+        As with the other functions in this class, just forwards the request on to the child template.
         """
-        return self.template.findTokenPosition(tokenName, inputPacket, forwardDecode)
+        return self.template.findTokenPositionInPacket(tokenName, inputPacket, forwardDecode)
 
 class signedInt(packetToken):
     """A signed integer token."""

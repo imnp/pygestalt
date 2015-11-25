@@ -20,14 +20,14 @@ class baseInterface(object):
 class serialInterface(baseInterface):
     """The base class for all serial port interfaces."""
     
-    def __init__(self, portName = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.2, flowControl = None):
+    def __init__(self, portName = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
         """Initializes a serial communications port.
         
         portName -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
         baudRate -- the communications speed to be used. Default is 115200 baud.
         interfaceType -- a string keyword to help search for the port. Types include 'ftdi' 
         name -- an optional name to provide to the interface
-        timeout -- the timeout in seconds on reading bytes from the port
+        timeout -- receiver timeout in seconds before returning '' if no data has been received
         flowControl -- TBD, can be used to enable hardware flow control, or to bring an Arduino into reset, once implemented.
         """
     
@@ -44,6 +44,7 @@ class serialInterface(baseInterface):
         self._threadIdleTime_ = 0.0005  #seconds, time for thread to idle between runs of loop
         self._portReconnectTime_ = 5    #seconds, time between attempts to reconnect to a down port.
         self.connect()
+        self.transmitter = self.startTransmitter()
     
     def connect(self, portName = None):
         """Connect to a serial port.
@@ -76,11 +77,43 @@ class serialInterface(baseInterface):
         """Returns True if the isConnectedFlag is set, otherwise False."""
         return self.isConnectedFlag.is_set()
     
+    def transmit(self, packet):
+        """Transmits a packet over the serial interface.
+        
+        packet -- the packets.serializedPacket to be transmitted
+        """
+        if self.isConnected():  #check to make sure connected before transmitting
+            self.transmitter.putPacketInTransmitQueue(packet)    #put data packet into the transmission queue
+            return True
+        else:
+            notice(self, str(self.portName)+ " is not connected!")
+            return False
+    
+    def receive(self):
+        """Reads one byte from the serial port input buffer.
+        
+        Note that if a port is open, this function will block while waiting for a byte. If the serialInterface is the interface for a
+        gestaltInterface, there is a receive thread that doesn't mind blocking.
+        """
+        if self.isConnected():
+            try:
+                return self.port.read(size = 1) #reads a single byte from the serial port. If empty will wait timeout period established on port instantiation, then returns ''
+            except: #likely that port closed while waiting to receive
+                notice(self.interface, "Lost connection to serial port " + str(self.interface.portName))
+                self.isConnectedFlag.clear()    #mark that port is closed. It will need to be reopened by the transmit thread.
+                return None
+        else:
+            return None
+    
     def startTransmitter(self):
-        """Starts up the transmitter thread."""
-        self.transmitter = self.transmitterThread(self)    #instantiate a transmitter thread
-        self.transmitter.daemon = True  #make transmitter thread a daemon so exits when program ends
-        self.transmitter.start()    #start up the transmitter!
+        """Starts up the transmitter thread.
+        
+        Returns the transmitter thread instance.
+        """
+        transmitter = self.transmitterThread(self)    #instantiate a transmitter thread
+        transmitter.daemon = True  #make transmitter thread a daemon so exits when program ends
+        transmitter.start()    #start up the transmitter!
+        return transmitter
     
     class transmitterThread(threading.Thread):
         """This thread handles transmitting bytes over a serial port."""
@@ -100,27 +133,39 @@ class serialInterface(baseInterface):
             """
             while True:
                 if self.interface.isConnected():    #check to make sure that the interface is connected
-                    pending, dataPacket = self.getDataFromTransmitQueue() #try to get data from the queue
+                    pending, packet = self.getPacketFromTransmitQueue() #try to get packet from the queue
                     if pending:
                         try:
-                            self.interface.port.write(utilities.serializeDataToString(dataPacket))
+                            self.interface.port.write(packet.toString())
                         except: #IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
                             self.interface.port.isConnectedFlag.clear() #port is no longer connected
-                            notice(self, "Lost connection to serial port " + str(self.interface.portName))
+                            notice(self.interface, "Lost connection to serial port " + str(self.interface.portName))
                         time.sleep(self.interface._threadIdleTime_) #idle
                 else:   #port isn't connected, attempt to reconnect
                     time.sleep(self.interface._portReconnectTime_)
                     self.interface.connect()    #attempt to reconnect         
         
-        def getDataFromTransmitQueue(self):
-            """Attempts to pull a data packet from the transmit queue.
+        def getPacketFromTransmitQueue(self):
+            """Attempts to pull a packet from the transmit queue.
             
-            Returns (True, dataPacket) if data is waiting in the queue to be transmitted, or (False, None) if not.
+            Returns (True, packet) if data is waiting in the queue to be transmitted, or (False, None) if not.
             """
             try:
-                return True, self.transmitQueue.get(block = False)    #signal success, return data
+                return True, self.transmitQueue.get(block = False)    #signal success, return packet
             except Queue.Empty:
-                return False, None  #signal failure, return None        
+                return False, None  #signal failure, return None  
+        
+        def putPacketInTransmitQueue(self, packet):
+            """Puts a packet in the transmit queue.
+            
+            packet -- a packet of type packets.serializedPacket
+            """
+            if type(packet) == packets.serializedPacket:
+                self.transmitQueue.put(packet)
+                return False
+            else:
+                notice(self.interface, "Can only place packets.serializedPacket objects in the transmitter queue. Instead received type "+ str(type(packet)))
+                return False      
         
         
         
@@ -440,9 +485,10 @@ class gestaltInterface(baseInterface):
         encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
         
         if actionObject.virtualNode._isInSyntheticMode_():   #return a synthetic response
-            self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
-        #here is where a call to the downstream interface's transmit should get called
-        #also need to work out how to do synthetic node calls here.
+            return self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
+        else:   #not running in synthetic mode, so pass along the packet to the transmitter
+            return self._interface_.transmit(encodedPacket)
+            
         
     class _syntheticResponseThread_(_interfaceThread_):
         """Generates synthetic inbound packets to simulate responses from physical nodes for development purposes.
@@ -499,8 +545,75 @@ class gestaltInterface(baseInterface):
                  
     
     class _receiveThread_(_interfaceThread_):
-        pass
-
+        """Receives a incoming packet over the interface channel and when complete places the packet in the packet router queue."""
+        
+        def resetReceiverState(self):
+            self.inProcessPacket = []    #initialize the currently received packet
+            self.packetReceiveState = 'waitingOnStartByte'
+            self.packetLength = 0
+        
+        def validateAndDecodePacket(self, packet):
+            """Validates and decodes a provided packet.
+            
+            packet -- the packet to be validated and decoded.
+            
+            returns the decoded packet in dictionary format if successful, or False if validation or decoding were unsuccessful
+            """
+            packet = packets.serializedPacket(packet)   #convert to a packets.serializedPacket object
+            if self.interface._gestaltPacket_.validateChecksum('_checksum_', packet): #checksum validates
+                decodedPacket = self.interface._gestaltPacket_.decode(packet)[0]
+                return decodedPacket
+            else:
+                return False
+            
+            
+        def run(self):
+            """Main receiver loop."""
+            
+            self.resetReceiverState()   #reset the receiver state
+            decodeIncompletePacket = self.interface._gestaltPacket_.decodeTokenInIncompletePacket #just a convenient alias to the gestalt packet's decodeIncompletePacket method
+            
+            while True:
+                receivedCharacter = self.interface._interface_.receive()    #will attempt to read in one character, but will return '' if nothing is avaliable after timeout period, or port is disconnected
+                if receivedCharacter:    #character was received
+                    receivedByte = ord(receivedCharacter)   #convert to an integer byte
+                    self.inProcessPacket += [receivedByte]
+                    if self.packetReceiveState == 'waitingOnStartByte': #waiting on the start byte
+                        success, startByte = decodeIncompletePacket('_startByte_', self.inProcessPacket)
+                        if success: #could successfully decode start byte
+                            if (startByte == 72 or startByte == 138):   #start byte is valid
+                                self.packetReceiveState = 'waitingOnLengthByte'   #put receiver in next state: wait for address to be received
+                                continue
+                            else:
+                                self.resetReceiverState() #reset the receiver state, and begin listening again
+                                continue
+                        else:   #haven't received the _startByte_ yet. In case for some reason _startByte_ ever becomes a two-byte word. Leaving this interpretation up to the packet.
+                            continue
+                        
+                    elif self.packetReceiveState == 'waitingOnLengthByte': #waiting on the length
+                        success, length = decodeIncompletePacket('_length_', self.inProcessPacket)
+                        if success:
+                            self.packetReceiveState = 'waitingToFinish'
+                            self.packetLength = length + 1  #checksum byte is not included in the figure reported by the length token.
+                        continue
+                    
+                    elif self.packetReceiveState == 'waitingToFinish':
+                        if len(self.inProcessPacket) == self.packetLength:  #entire packet has been received
+                            decodedPacket = self.validateAndDecodePacket(self.inProcessPacket)
+                            if decodedPacket: #packet validates against checksum
+                                self.interface._packetRouter_.putDecodedPacket(decodedPacket)    #convert to packets.serializedPacket type and put the decoded packet in the router queue
+                                self.resetReceiverState()   #reset the receiver state
+                                continue
+                            else:   #packet didn't validate, reset the receiver and continue
+                                self.resetReceiverState()
+                                continue
+                        else:   #haven't reached the end of the packet yet
+                            continue
+                else:   #receiver timed out, reset state
+                    self.resetReceiverState()
+                    time.sleep(self.interface._threadIdleTime_) #idle
+                            
+                        
     def _getVirtualNodeFromAddress_(self, address):
         """Returns the virtual node whose address matches a provided value.
         

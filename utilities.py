@@ -173,3 +173,4 @@ class CRC():
         
         if actualCRC != checkCRC:    return False    #CRC doesn't match
         else:    return True    #CRC matches
+        
