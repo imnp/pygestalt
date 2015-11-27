@@ -78,7 +78,7 @@ gestaltPacket = packets.template('gestaltPacketTemplate',
 # x = getTuna('charlie')
 # print x
 
-config.syntheticModeOff()    #turn on synthetic mode
+config.syntheticModeOn()    #turn on synthetic mode
 
 # # The code below tests whether actionObject classes are being copied
 
@@ -86,21 +86,22 @@ serialInterface = interfaces.serialInterface('/dev/tty.usbserial-AH013FH0')
 
 
 myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode", interface = serialInterface)
-# print myGestaltNode._virtualNode_
-# myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
-
-# print myGestaltNode.statusRequest()
-
-
-
-# print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
-# print myGestaltNode.bootReadRequest(pageNumber = 127)
-# print myGestaltNode.urlRequest()
-# print myGestaltNode.setAddressRequest(1025)
-# print myGestaltNode.synNodeAddress
-# print myGestaltNode.identifyRequest()
-# print myGestaltNode.resetRequest()
-# print myGestaltNode
+# myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
+print myGestaltNode._virtualNode_
+myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
+  
+print myGestaltNode.statusRequest()
+  
+  
+  
+print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
+print myGestaltNode.bootReadRequest(pageNumber = 127)
+print myGestaltNode.urlRequest()
+print myGestaltNode.setAddressRequest(1025)
+print myGestaltNode.synNodeAddress
+print myGestaltNode.identifyRequest()
+print myGestaltNode.resetRequest()
+print myGestaltNode
 # class myGestaltNode(nodes.gestaltNode):
 #     def init(self):
 #         print "myGestaltNode init"

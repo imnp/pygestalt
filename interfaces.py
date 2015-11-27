@@ -10,7 +10,7 @@ import time
 import copy
 import random   #for generating new addresses
 import serial
-from pygestalt import core, packets, utilities
+from pygestalt import core, packets, utilities, config
 from pygestalt.utilities import notice
 
 class baseInterface(object):
@@ -53,24 +53,29 @@ class serialInterface(baseInterface):
         
         This function will attempt to connect to either the provided port name, or the interface's self.portName. If a port is provided
         as the input argument, and if connection is successful, self.portName will be updated to reflect the currently connected port.
+        
+        If synthetic mode is enabled globally (in pygestalt.config) this method will not attempt to connect and will return False.
         """
         if portName:
             connectToPortName = portName    #use argument if provided
         elif self.portName:
             connectToPortName = self.portName   #default to interface's portName
-        
-        try:
-            self.port = serial.Serial(connectToPortName, self.baudRate, timeout = self.timeout) #Connect to the serial port
-            notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
-            self.port.flushInput()  #do some spring cleaning
-            self.port.flushOutput()
-            time.sleep(2)   #some ports require a brief amount of time between opening and transmission
-            self.isConnectedFlag.set() #sets the is connected flag
-            self.startTransmitter() #starts up the transmission thread
-            return True
-        except StandardError, error:
-            notice(self, "Error opening serial port " + str(connectToPortName))
-            notice(self, error) #report system-provided error.
+            
+        if not config.syntheticMode():  #not in global synthetic mode
+            try:
+                self.port = serial.Serial(connectToPortName, self.baudRate, timeout = self.timeout) #Connect to the serial port
+                notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
+                self.port.flushInput()  #do some spring cleaning
+                self.port.flushOutput()
+                time.sleep(2)   #some ports require a brief amount of time between opening and transmission
+                self.isConnectedFlag.set() #sets the is connected flag
+                self.startTransmitter() #starts up the transmission thread
+                return True
+            except StandardError, error:
+                notice(self, "Error opening serial port " + str(connectToPortName))
+                notice(self, error) #report system-provided error.
+                return False
+        else:   #in global synthetic mode, don't connect and return False
             return False
     
     def isConnected(self):
@@ -552,14 +557,12 @@ class gestaltInterface(baseInterface):
             self.packetReceiveState = 'waitingOnStartByte'
             self.packetLength = 0
         
-        def validateAndDecodePacket(self, packet):
-            """Validates and decodes a provided packet.
-            
-            packet -- the packet to be validated and decoded.
+        def validateAndDecodePacket(self):
+            """Validates and decodes self.inProcessPacket.
             
             returns the decoded packet in dictionary format if successful, or False if validation or decoding were unsuccessful
             """
-            packet = packets.serializedPacket(packet)   #convert to a packets.serializedPacket object
+            packet = packets.serializedPacket(self.inProcessPacket)   #convert to a packets.serializedPacket object
             if self.interface._gestaltPacket_.validateChecksum('_checksum_', packet): #checksum validates
                 decodedPacket = self.interface._gestaltPacket_.decode(packet)[0]
                 return decodedPacket
@@ -574,7 +577,11 @@ class gestaltInterface(baseInterface):
             decodeIncompletePacket = self.interface._gestaltPacket_.decodeTokenInIncompletePacket #just a convenient alias to the gestalt packet's decodeIncompletePacket method
             
             while True:
-                receivedCharacter = self.interface._interface_.receive()    #will attempt to read in one character, but will return '' if nothing is avaliable after timeout period, or port is disconnected
+                if self.interface._interface_:  #a downstream interface exists
+                    receivedCharacter = self.interface._interface_.receive()    #will attempt to read in one character, but will return '' if nothing is avaliable after timeout period, or port is disconnected
+                else:
+                    time.sleep(self.interface._threadIdleTime_) #idle
+                    continue                    
                 if receivedCharacter:    #character was received
                     receivedByte = ord(receivedCharacter)   #convert to an integer byte
                     self.inProcessPacket += [receivedByte]
@@ -599,7 +606,7 @@ class gestaltInterface(baseInterface):
                     
                     elif self.packetReceiveState == 'waitingToFinish':
                         if len(self.inProcessPacket) == self.packetLength:  #entire packet has been received
-                            decodedPacket = self.validateAndDecodePacket(self.inProcessPacket)
+                            decodedPacket = self.validateAndDecodeInProcessPacket()
                             if decodedPacket: #packet validates against checksum
                                 self.interface._packetRouter_.putDecodedPacket(decodedPacket)    #convert to packets.serializedPacket type and put the decoded packet in the router queue
                                 self.resetReceiverState()   #reset the receiver state
