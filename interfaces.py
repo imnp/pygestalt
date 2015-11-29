@@ -60,16 +60,18 @@ class serialInterface(baseInterface):
             connectToPortName = portName    #use argument if provided
         elif self.portName:
             connectToPortName = self.portName   #default to interface's portName
+        else:
+            connectToPortName = None
             
         if not config.syntheticMode():  #not in global synthetic mode
             try:
                 self.port = serial.Serial(connectToPortName, self.baudRate, timeout = self.timeout) #Connect to the serial port
-                notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
                 self.port.flushInput()  #do some spring cleaning
                 self.port.flushOutput()
                 time.sleep(2)   #some ports require a brief amount of time between opening and transmission
                 self.isConnectedFlag.set() #sets the is connected flag
                 self.startTransmitter() #starts up the transmission thread
+                notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
                 return True
             except StandardError, error:
                 notice(self, "Error opening serial port " + str(connectToPortName))
@@ -557,7 +559,7 @@ class gestaltInterface(baseInterface):
             self.packetReceiveState = 'waitingOnStartByte'
             self.packetLength = 0
         
-        def validateAndDecodePacket(self):
+        def validateAndDecodeInProcessPacket(self):
             """Validates and decodes self.inProcessPacket.
             
             returns the decoded packet in dictionary format if successful, or False if validation or decoding were unsuccessful

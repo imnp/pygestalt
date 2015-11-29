@@ -236,9 +236,11 @@ class actionObject(object):
                 self._releaseChannelAccessLock_()   #release access to the channel
                 return True
             else:
-                notice(self, "Could not reach virtual node. Retrying (#" + str(thisAttempt+2) + "/"+str(attempts)+")")
+                if thisAttempt+1 < attempts:    #not the final attempt
+                    notice(self, "Could not reach virtual node. Retrying (#" + str(thisAttempt+2) + "/"+str(attempts)+")")
                 continue
         #could not reach node if got to here
+        notice(self, "Unable to reach virtual node after " + str(attempts) + " attempts.")
         self._releaseChannelAccessLock_()   #release access to the channel
         return False
 

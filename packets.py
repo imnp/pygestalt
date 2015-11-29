@@ -414,7 +414,7 @@ class packetToken(object):
         if self.keyName in encodeDict:  # keyName has a matching value in the encodeDict, proceed!
             return self._encode_(encodeDict[self.keyName], inProcessPacket) # call the subclass's _encode_ method for token-specific processing.
         elif self.requireEncodeDict: # no keyName has been found and dictionary required, so compose a useful error message and raise an exception.
-            if self.parentTemplateName: errorMessage = str(self.keyName) + " not found in template " + self.parentTemplateName + "."
+            if self.parentTemplateName: errorMessage = 'keyName "' + str(self.keyName) + '" in template ' + self.parentTemplateName + ' but not found in provided encode dictionary'
             else: errorMessage = str(self.keyName) + " not found in template."
             raise KeyError(errorMessage)
         else: return self._encode_(None, inProcessPacket)   #some tokens don't require an entry in the encode dictionary

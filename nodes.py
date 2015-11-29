@@ -96,11 +96,17 @@ class baseGestaltNode(baseVirtualNode):
         utilities.callFunctionAcrossMRO(self, "initPorts")
         utilities.callFunctionAcrossMRO(self, "initLast")
         self._initInterface_()  #initialize interface
-        if not self._updateVirtualNode_(self._originalInitArgs_, self._originalInitKwargs_):  #Updates the virtual node object contained within _shell_ based on URL received from node
-            utilities.callFunctionAcrossMRO(self, "onLoad")   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
+        
+        if self.runApplication():   #The node has a valid application running. Try to update virtual node if necessary.
+            if not self._updateVirtualNode_(self._originalInitArgs_, self._originalInitKwargs_):  #Updates the virtual node object contained within _shell_ based on URL received from node
+                utilities.callFunctionAcrossMRO(self, "onLoad")   #begin recursive onLoad if virtual node instance still valid after _updateVirtualNode_
+                return self
+            else: #returned True: this virtual node instance has been supplanted
+                return self._shell_._virtualNode_    #don't use me, use the virtualNode instance already in the shell.
+        else:   #could not start application
+            utilities.callFunctionAcrossMRO(self, "onLoad")
             return self
-        else: #returned True: this virtual node instance has been supplanted
-            return self._shell_._virtualNode_    #don't use me, use the virtualNode instance already in the shell.
+            
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
@@ -190,19 +196,6 @@ class baseGestaltNode(baseVirtualNode):
 
         if self._shell_._nodeLoaded_:   #a non-default node is already loaded into the shell.
             return False
-        
-        #put into application mode
-        nodeStatus, appValid = self.statusRequest() #get current status of node
-        
-        if not appValid:    #application is not valid
-            notice(self, "Application firmware is invalid!")
-            return False
-        
-        if nodeStatus == 'B':   #in bootloader mode, attempt to switch to application mode
-            if not self.runApplication():   #cannot switch to application mode
-                notice(self, "Unable to switch node to application mode.")
-                notice(self, "Running in bootloader mode!")
-                return False
 
         nodeURL = self.urlRequest() #get node URL
         
@@ -487,9 +480,11 @@ class gestaltNode(baseGestaltNode):
             notice(self, "PAGE " + str(currentPageNumber) + " VERIFIED!")
         notice(self, "VERIFY PASSED")
         #start application
-        if not self.runApplication():
-            notice(self, "COULD NOT START APPLICATION")
-            return FALSE
+        if not self.runApplication(enforceValidity = False):    #validity flag doesn't get set until application firmware runs, so need to skip check first time after loading new firmware
+            notice(self, "BOOTLOADER COULD NOT START APPLICATION")
+            return False
+        else:
+            notice(self, "NEW FIRMWARE " + str(filename) + " LOADED SUCCESSFULLY")
         #register new node with gestalt interface
         #self.target.nodeManager.assignNode(self)    #registers node with target        
         #need something here to import a new node into self.shell based on URL from node    
@@ -499,11 +494,31 @@ class gestaltNode(baseGestaltNode):
     
     def initBootload(self):
         """Initializes bootloader."""
-        return self.bootCommandRequest('startBootload')
+        return self.bootCommandRequest('startBootloader')
     
-    def runApplication(self):
-        """Starts the physical node application firmware."""
-        return self.bootCommandRequest('startApplication')
+    def runApplication(self, enforceValidity = True):
+        """Attempts to starts the physical node application firmware.
+        
+        enforceValidity -- if True, ensure that the application firmware is valid before running. This option is used by the bootloader.
+        
+        Returns True if successful, or False if unsuccessful.
+        """
+        
+        nodeStatus, appValid = self.statusRequest() #get current status of node
+        
+        if enforceValidity:
+            if not appValid:    #application is not valid
+                notice(self, "Application firmware is invalid!")
+                return False
+        
+        if nodeStatus == 'B':   #in bootloader mode, attempt to switch to application mode
+            if not self.bootCommandRequest('startApplication'):   #cannot switch to application mode
+                notice(self, "Unable to switch node to application mode.")
+                notice(self, "Running in bootloader mode!")
+                return False
+            else:
+                return True
+
 
     # --- actionObjects ---
     class statusRequest(core.actionObject):
@@ -912,4 +927,11 @@ class gestaltNodeShell(nodeShell):
     def _shellInit_(self, *args, **kwargs):
         if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
             self._virtualNode_ = gestaltNode(*args, **kwargs)
-        
+
+class soloGestaltNode(gestaltNodeShell):
+    """The node shell type for solo (non-networked) gestalt nodes.
+    
+    This container is provided to make user code more clear in terms of the type of node. For now, there is no functional difference between
+    solo and networked gestalt nodes at the base virtual node level.
+    """
+    pass
