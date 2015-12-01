@@ -12,7 +12,7 @@ import random   #for generating new addresses
 import serial
 import os, platform
 from pygestalt import core, packets, utilities, config
-from pygestalt.utilities import notice
+from pygestalt.utilities import notice, debugNotice
 
 class baseInterface(object):
     """The base class for all interfaces in the Gestalt framework."""
@@ -569,6 +569,9 @@ class gestaltInterface(baseInterface):
             return False
         packetEncodeDictionary = {'_startByte_':startByte, '_address_':address, '_port_':port, '_payload_':payload} #establish the encode dictionary
         encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
+        
+        actionObjectName = type(actionObject).__name__
+        debugNotice(self, "_gestaltInterfaceTransmit_", actionObjectName + " on port " + str(port) + " (outbound)")
         
         if actionObject.virtualNode._isInSyntheticMode_():   #return a synthetic response
             return self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)

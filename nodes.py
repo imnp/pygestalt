@@ -9,7 +9,7 @@ import time
 import imp, os, urllib  #for importing files
 import copy
 from pygestalt import core, packets, utilities, interfaces, config
-from pygestalt.utilities import notice
+from pygestalt.utilities import notice, debugNotice
 
 class baseVirtualNode(object):
     """Base class for all virtual nodes"""
@@ -320,6 +320,10 @@ class baseGestaltNode(baseVirtualNode):
         packet -- a serialized payload packet aimed at the target actionObject type
         """
         actionObjectClass = self._getInboundActionObjectFromPortNumber_(port) #get the actionObject class
+        
+        actionObjectName = actionObjectClass.__name__
+        debugNotice(self, "_gestaltNodeInboundRouter_", actionObjectName + " on port " + str(port) + " (inbound)")        
+        
         #make a call to the inbound action object first
         inboundActionObject = actionObjectClass()   #instantiate a new inbound action object
         inboundActionObject._decodeAndSetInboundPacket_(packet) #provides packet to the inbound action object

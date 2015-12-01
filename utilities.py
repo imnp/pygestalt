@@ -8,6 +8,7 @@ import math
 import ast
 import datetime
 import itertools
+from pygestalt import config
 
 def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parentToChild = True):
     """Calls a function on all classes in instance's method resolution order.
@@ -30,6 +31,26 @@ def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parent
     for thisClass in mro:   #iterate over classes in method resolution order
         if functionName in thisClass.__dict__:  #check to make sure class has function defined in __dict__. This prevents calling a base class's method multiple times.
             thisClass.__dict__[functionName](instance, *args, **kwargs)   #call class function on instance with provided arguments
+
+def objectIdentifier(callingObject):
+    """Returns a human-readable string identifier for a provided object.
+    
+    callingObject -- the object to be identified
+    
+    This method figures out the best name to use in identifying an object, taking queues from:
+    - its _name_ attribute, if avaliable
+    - more to be added as this evolves...
+    
+    Returns a string that can be used to identify the object to the user.
+    """
+    if hasattr(callingObject, '_name_'):    #object has a _name_ attribute
+        name = getattr(callingObject, '_name_')
+        if name:    #name is not False (or None)
+            return name #just return the name
+        else:   #name is False or None
+            return str(callingObject) #_name_ is None or False, return the object str representation
+    else:
+        return str(callingObject) #no _name_ attribute, return the object str representation   
     
     
 def notice(callingObject, noticeString):
@@ -40,15 +61,26 @@ def notice(callingObject, noticeString):
     
     For now this function just prints to the terminal, but eventually it could publish to a browser-based interface etc...
     """
-    if hasattr(callingObject, '_name_'):    #object has a _name_ attribute
-        name = getattr(callingObject, '_name_')
-        if name:    #name is not False (or None)
-            print "[" + name + "] " + str(noticeString)   #print "name: message"
-        else:   #name is False or None
-            print "[" + str(callingObject) + "] " + str(noticeString) #print objectRepr: message
-    else:
-        print "[" + str(callingObject) + "] " + str(noticeString) #print objectRepr: message
+    print "[" + objectIdentifier(callingObject) + "] " + str(noticeString) #print objectRepr: message
 
+def debugNotice(callingObject, channel, noticeString):
+    """If global verbose debug is enabled, this function will print a formatted notice in the terminal window or alternate target.
+    
+    callingObject -- the instance object making the call
+    channel -- a string channel name, which allows filtering debug output if desired (not currently enabled)
+    noticeString -- the message to be printed
+    
+    Currently assigned channels:
+        _gestaltInterfaceTransmit_ -- messages from the gestalt interface transmit function
+        _gestaltNodeInboundRouter_ -- messages from the base gestalt node inbound packet router
+    
+    Returns True if notice was printed (verbose debug is enabled), or False otherwise
+    """
+    if config.verboseDebug():
+        print "[" + objectIdentifier(callingObject) + "] " + str(noticeString)
+        return True
+    else:
+        return False
 
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.

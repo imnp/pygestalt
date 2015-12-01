@@ -23,7 +23,7 @@ def getGlobalVariable(name):
     else:
         return None
 
-
+#global synthetic mode
 def syntheticModeOn():
     """Sets the global syntheticMode flag to True."""
     setGlobalVariable('syntheticModeFlag', True)
@@ -33,8 +33,28 @@ def syntheticModeOff():
     setGlobalVariable('syntheticModeFlag', False)
 
 def syntheticMode():
-    """Returns the current state of the syntheticMode flag."""
+    """Returns the current state of the syntheticMode flag.
+    
+    If global synthetic mode is enabled, all nodes will issue synthetic responses to actionObject requests.
+    """
     return getGlobalVariable('syntheticModeFlag')
+
+#global verbose debug
+def verboseDebugOn():
+    """Sets the global verboseDebug flag to True."""
+    setGlobalVariable('verboseDebugFlag', True)
+
+def verboseDebugOff():
+    """Sets the global verboseDebug flag to False."""
+    setGlobalVariable('verboseDebugFlag', False)
+
+def verboseDebug():
+    """Returns the current state of the verboseDebug flag.
+    
+    If global verbose debug is enabled, any calls to utilities.debugNotice will result in a notification output.
+    """
+    return getGlobalVariable('verboseDebugFlag')
 
 #Global flags
 syntheticModeOff()
+verboseDebugOff()
