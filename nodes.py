@@ -331,7 +331,24 @@ class baseGestaltNode(baseVirtualNode):
             outboundActionObject._inboundPacketFlag_.set()  #set flag on outbound actionObject instance to indicate that a packet has been received
         
         return True
+    
+    def setDefaultInterface(self, interface):
+        """Sets the default interface that the virtual node should use if none is provided on instantiation.
         
+        interface -- the interface that should be used if no other interface has been provided to the node.
+        
+        If no interface is passed to the node's _init_ on instantiation, the default interface provided to this function will be used instead.
+        This is typically called from within the virtual node's init routine, and makes it possible for users to simply import the virtual node
+        directly and have it attach to a pre-suggested interface. This is particularly useful with standalone nodes.
+        
+        Returns True if the default interface was used, or False if an alternate interface was already provided.
+        """
+        if self._interface_ == None:
+            self._interface_ = interface
+            return True
+        else:
+            return False
+    
 class gestaltNode(baseGestaltNode):
     """The standard Gestalt node class.
     

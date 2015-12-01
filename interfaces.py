@@ -16,7 +16,10 @@ from pygestalt.utilities import notice
 
 class baseInterface(object):
     """The base class for all interfaces in the Gestalt framework."""
-    pass
+    
+    def start(self):
+        """Start method should be overriden by derived class."""
+        pass
 
 class serialInterface(baseInterface):
     """The base class for all serial port interfaces."""
@@ -30,6 +33,8 @@ class serialInterface(baseInterface):
         name -- an optional name to provide to the interface
         timeout -- receiver timeout in seconds before returning '' if no data has been received
         flowControl -- TBD, can be used to enable hardware flow control, or to bring an Arduino into reset, once implemented.
+        
+        Note that the interface will not connect until a call to the start method is made. This is to allow for default interface objects to be created without them auto-connecting.
         """
     
         self.providedPortPath = port    #the full path of the port provided on instantiation
@@ -43,45 +48,52 @@ class serialInterface(baseInterface):
         
         self.port = False    #the currently connected port, False if not connected
         self.isConnectedFlag = threading.Event()    #keeps track of current status of interface
+        self.isStartedFlag = threading.Event()  #keeps track of whether the interface has been started (connected and the transmitter thread running)
         self._threadIdleTime_ = 0.0005  #seconds, time for thread to idle between runs of loop
         self._portReconnectTime_ = 5    #seconds, time between attempts to reconnect to a down port.
-        self.connect()
-        self.transmitter = self.startTransmitter()
         
-        def getPortSearchStrings(self, interfaceType = None):
-            """Returns a list of likely prefixes for a serial port based on the operating system and provided device type information.
-            
-            interfaceType -- a string suggestion for the type of interface being used. This could be the type of USB-to-serial converter for example.
-            
-            Returns a list of likely search strings if an interfaceType is provided, or all possible non-generic matching search strings if interfaceType is None
-            """
-            
-            #define search strings in the format {'operatingSystem':['searchString1', 'searchString2', ...]}
-            ftdiSearchStrings = {'Darwin':['tty.usbserial'],    # Mac OSX
-                                 'Linux': ['ttyUSB', 'ttyACM']} # Linux
-            lufaSearchStrings = {'Darwin':['tty.usbmodem'],  # Mac OSX
-                    'Linux': ['ttyUSB', 'ttyACM']}  # Linux
-            
-            searchStrings = {'ftdi': ftdiSearchStrings,
-                             'lufa': lufaSearchStrings}
-            
-            operatingSystem = platform.system()
-            
-            relevantSearchStrings = []  #this is where the list of all relevant search strings will be compiled
-            
-            for interfaceTypeKey in searchStrings:  #iterate over all search strings
-                if interfaceTypeKey == interfaceType or interfaceType == None:  #either matches interfaceType provided by user, or user did not provide an interface type
-                    searchDict = searchStrings[interfaceTypeKey]
-                    if operatingSystem in searchDict:
-                        relevantSearchStrings += searchDict[operatingSystem]
-                    else:   #could not find operating system in the search dictionary
-                        if interfaceType != None:   #this interface was specifically asked for by the user, so give a polite notice what's up
-                            notice('getSearchTerm', 'Serial port auto-search support not found for this operating system (' + operatingSystem + ') and interface type ' + str(interfaceType))
-            
-            if interfaceType not in searchStrings and interfaceType != None:
-                notice('getSearchTerm', 'Serial port auto-search support not found for the suggested interface type '+ str(interfaceType))
-            
-            return relaventSearchStrings
+        
+    def start(self):
+        """Connects the interface to a hardware port and starts the transmitter thread."""
+        if not self.isStarted(): #only allow to start once
+            self.connect()
+            self.transmitter = self.startTransmitter()
+            self.isStartedFlag.set()    #flag that interface is started up.
+        
+    def getPortSearchStrings(self, interfaceType = None):
+        """Returns a list of likely prefixes for a serial port based on the operating system and provided device type information.
+        
+        interfaceType -- a string suggestion for the type of interface being used. This could be the type of USB-to-serial converter for example.
+        
+        Returns a list of likely search strings if an interfaceType is provided, or all possible non-generic matching search strings if interfaceType is None
+        """
+        
+        #define search strings in the format {'operatingSystem':['searchString1', 'searchString2', ...]}
+        ftdiSearchStrings = {'Darwin':['tty.usbserial'],    # Mac OSX
+                             'Linux': ['ttyUSB', 'ttyACM']} # Linux
+        lufaSearchStrings = {'Darwin':['tty.usbmodem'],  # Mac OSX
+                'Linux': ['ttyUSB', 'ttyACM']}  # Linux
+        
+        searchStrings = {'ftdi': ftdiSearchStrings,
+                         'lufa': lufaSearchStrings}
+        
+        operatingSystem = platform.system()
+        
+        relevantSearchStrings = []  #this is where the list of all relevant search strings will be compiled
+        
+        for interfaceTypeKey in searchStrings:  #iterate over all search strings
+            if interfaceTypeKey == interfaceType or interfaceType == None:  #either matches interfaceType provided by user, or user did not provide an interface type
+                searchDict = searchStrings[interfaceTypeKey]
+                if operatingSystem in searchDict:
+                    relevantSearchStrings += searchDict[operatingSystem]
+                else:   #could not find operating system in the search dictionary
+                    if interfaceType != None:   #this interface was specifically asked for by the user, so give a polite notice what's up
+                        notice('getSearchTerm', 'Serial port auto-search support not found for this operating system (' + operatingSystem + ') and interface type ' + str(interfaceType))
+        
+        if interfaceType not in searchStrings and interfaceType != None:
+            notice('getSearchTerm', 'Serial port auto-search support not found for the suggested interface type '+ str(interfaceType))
+        
+        return relaventSearchStrings
                         
                         
     def connect(self):
@@ -144,11 +156,19 @@ class serialInterface(baseInterface):
         """Returns True if the isConnectedFlag is set, otherwise False."""
         return self.isConnectedFlag.is_set()
     
+    def isStarted(self):
+        """Returns True if the isStartedFlag is set, otherwise False."""
+        return self.isStartedFlag.is_set()
+    
+    
     def transmit(self, packet):
         """Transmits a packet over the serial interface.
         
         packet -- the packets.serializedPacket to be transmitted
         """
+        if not self.isStarted():    #if a transmit request is made but the interface isn't started yet, go ahead and start it up.
+            self.start()
+        
         if self.isConnected():  #check to make sure connected before transmitting
             self.transmitter.putPacketInTransmitQueue(packet)    #put data packet into the transmission queue
             return True
@@ -263,6 +283,7 @@ class gestaltInterface(baseInterface):
                                               packets.packet('_payload_'), #included packet
                                               packets.checksum('_checksum_')) #automatically calculated checksum
         
+        if self._interface_: self._interface_.start()   #start up whatever downstream interface was provided.
         self._startInterfaceThreads_()  #start up interface threads 
         
     def _pullNewAddress_(self):
