@@ -10,6 +10,7 @@ import time
 import copy
 import random   #for generating new addresses
 import serial
+import os, platform
 from pygestalt import core, packets, utilities, config
 from pygestalt.utilities import notice
 
@@ -20,65 +21,124 @@ class baseInterface(object):
 class serialInterface(baseInterface):
     """The base class for all serial port interfaces."""
     
-    def __init__(self, portName = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
+    def __init__(self, port = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
         """Initializes a serial communications port.
         
         portName -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
         baudRate -- the communications speed to be used. Default is 115200 baud.
-        interfaceType -- a string keyword to help search for the port. Types include 'ftdi' 
+        interfaceType -- a string keyword to help search for the port. Types include 'ftdi' and 'lufa'
         name -- an optional name to provide to the interface
         timeout -- receiver timeout in seconds before returning '' if no data has been received
         flowControl -- TBD, can be used to enable hardware flow control, or to bring an Arduino into reset, once implemented.
         """
     
-        self.providedPortName = portName    #the name of the port provided on instantiation
-        self.portName = portName    #the name of the port last connected to. This can be automatically changed by the connect method
+        self.providedPortPath = port    #the full path of the port provided on instantiation
+        self.portPath = port    #the full path of the port last connected to. This can be automatically changed by the connect method
         self.baudRate = baudRate
         self.interfaceType = interfaceType
+        self.providedName = name    #the name as provided by the user. If None, indicates that it's OK to auto-set _name_ to the port name.
         self._name_ = name
         self.timeout = timeout
         self.flowControl = flowControl
         
-        self.port = None    #the currently connected port
+        self.port = False    #the currently connected port, False if not connected
         self.isConnectedFlag = threading.Event()    #keeps track of current status of interface
         self._threadIdleTime_ = 0.0005  #seconds, time for thread to idle between runs of loop
         self._portReconnectTime_ = 5    #seconds, time between attempts to reconnect to a down port.
         self.connect()
         self.transmitter = self.startTransmitter()
-    
-    def connect(self, portName = None):
-        """Connect to a serial port.
         
-        portName -- the full name of the serial port to which to connect. If None, will attempt to connect to self.portName.
+        def getPortSearchStrings(self, interfaceType = None):
+            """Returns a list of likely prefixes for a serial port based on the operating system and provided device type information.
+            
+            interfaceType -- a string suggestion for the type of interface being used. This could be the type of USB-to-serial converter for example.
+            
+            Returns a list of likely search strings if an interfaceType is provided, or all possible non-generic matching search strings if interfaceType is None
+            """
+            
+            #define search strings in the format {'operatingSystem':['searchString1', 'searchString2', ...]}
+            ftdiSearchStrings = {'Darwin':['tty.usbserial'],    # Mac OSX
+                                 'Linux': ['ttyUSB', 'ttyACM']} # Linux
+            lufaSearchStrings = {'Darwin':['tty.usbmodem'],  # Mac OSX
+                    'Linux': ['ttyUSB', 'ttyACM']}  # Linux
+            
+            searchStrings = {'ftdi': ftdiSearchStrings,
+                             'lufa': lufaSearchStrings}
+            
+            operatingSystem = platform.system()
+            
+            relevantSearchStrings = []  #this is where the list of all relevant search strings will be compiled
+            
+            for interfaceTypeKey in searchStrings:  #iterate over all search strings
+                if interfaceTypeKey == interfaceType or interfaceType == None:  #either matches interfaceType provided by user, or user did not provide an interface type
+                    searchDict = searchStrings[interfaceTypeKey]
+                    if operatingSystem in searchDict:
+                        relevantSearchStrings += searchDict[operatingSystem]
+                    else:   #could not find operating system in the search dictionary
+                        if interfaceType != None:   #this interface was specifically asked for by the user, so give a polite notice what's up
+                            notice('getSearchTerm', 'Serial port auto-search support not found for this operating system (' + operatingSystem + ') and interface type ' + str(interfaceType))
+            
+            if interfaceType not in searchStrings and interfaceType != None:
+                notice('getSearchTerm', 'Serial port auto-search support not found for the suggested interface type '+ str(interfaceType))
+            
+            return relaventSearchStrings
+                        
+                        
+    def connect(self):
+        """Connect the interface to a serial port.
         
-        This function will attempt to connect to either the provided port name, or the interface's self.portName. If a port is provided
-        as the input argument, and if connection is successful, self.portName will be updated to reflect the currently connected port.
+        This function will attempt to connect the serial interface to an appropriate port. If a port name was provided on instantiation,
+        that port will be used exclusively. Otherwise, this function will attempt to determine automatically which port to connect to.
         
         If synthetic mode is enabled globally (in pygestalt.config) this method will not attempt to connect and will return False.
         """
-        if portName:
-            connectToPortName = portName    #use argument if provided
-        elif self.portName:
-            connectToPortName = self.portName   #default to interface's portName
-        else:
-            connectToPortName = None
+        targetPortPath = None   #default value until otherwise determined
+        
+        if self.portPath: #a port path is already avaliable, either thru prior discovery or provided on instantiation
+            targetPortPath = self.portPath
             
         if not config.syntheticMode():  #not in global synthetic mode
-            try:
-                self.port = serial.Serial(connectToPortName, self.baudRate, timeout = self.timeout) #Connect to the serial port
-                self.port.flushInput()  #do some spring cleaning
-                self.port.flushOutput()
-                time.sleep(2)   #some ports require a brief amount of time between opening and transmission
-                self.isConnectedFlag.set() #sets the is connected flag
-                self.startTransmitter() #starts up the transmission thread
-                notice(self, "Successfully connected to port " + str(connectToPortName))    #brag a little bit
+            if targetPortPath != None:  #a port path is avaliable for the connection
+                self.connectToPort(targetPortPath)
                 return True
-            except StandardError, error:
-                notice(self, "Error opening serial port " + str(connectToPortName))
-                notice(self, error) #report system-provided error.
+            else:
+                notice(self, "No valid port is avaliable for a connection.")
                 return False
         else:   #in global synthetic mode, don't connect and return False
             return False
+    
+    def connectToPort(self, portPath):
+        """This function connects the serial interface to a specified hardware port.
+        
+        portPath -- the full path of the port to which to connect, in string format
+        
+        Returns True if connected successfully, or False if not.
+        """
+        if self.isConnected(): self.disconnect  #close any open connection
+        try:
+            self.port = serial.Serial(portPath, self.baudRate, timeout = self.timeout) #Connect to the serial port
+            self.port.flushInput()  #do some spring cleaning
+            self.port.flushOutput()
+            time.sleep(2)   #some ports require a brief amount of time between opening and transmission
+            self.isConnectedFlag.set() #sets the is connected flag
+            if self.providedName == None:
+                self._name_ = os.path.basename(portPath)    #no name was provided, so automatically set _name_ to the name of the port
+            notice(self, "Successfully connected to port " + str(portPath))    #brag a little bit
+            return True
+        except StandardError, error:
+            notice(self, "Error opening serial port " + str(portPath))
+            notice(self, error) #report system-provided error.
+            return False
+    
+    def disconnect(self):
+        """Disconnects the serial interface from a connected hardware port."""
+        try:
+            self.port.close()   #closes the port
+        except: #likely that port already isn't open
+            pass
+        self.isConnectedFlag.clear()    #clear the connected flag
+        return
+        
     
     def isConnected(self):
         """Returns True if the isConnectedFlag is set, otherwise False."""
@@ -173,8 +233,6 @@ class serialInterface(baseInterface):
             else:
                 notice(self.interface, "Can only place packets.serializedPacket objects in the transmitter queue. Instead received type "+ str(type(packet)))
                 return False      
-        
-        
         
 class gestaltInterface(baseInterface):
     """Communicates with physical nodes that have implemented the Gestalt protocol."""
