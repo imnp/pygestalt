@@ -669,13 +669,14 @@ class signedInt(packetToken):
         size -- the length in bytes of the signed integer. Note that max value is +/- 0.5*size.
         """
         self.size = size
+        self.bitSize = size*8
         
     def _encode_(self, encodeValue, inProcessPacket):
         """Encodes the provided value into a signed integer fit within the specified number of bytes.
         
         encodeValue -- the signed integer to be encoded.
         """
-        twosComplementRepresentation = utilities.signedIntegerToTwosComplement(encodeValue, self.size)  #note that function handles both pos and neg numbers.
+        twosComplementRepresentation = utilities.signedIntegerToTwosComplement(encodeValue, self.bitSize)  #note that function handles both pos and neg numbers.
         return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size) # convert to byte list.
 
     def _decode_(self, decodePacket):
@@ -684,7 +685,7 @@ class signedInt(packetToken):
         decodePacket -- the ordered list of bytes to be converted into an unsigned integer.
         """
         twosComplementInteger = utilities.bytesToUnsignedInteger(decodePacket)
-        return utilities.twosComplementToSignedInteger(twosComplementInteger, self.size)
+        return utilities.twosComplementToSignedInteger(twosComplementInteger, self.bitSize)
            
 
 class fixedPoint(packetToken):
@@ -696,17 +697,22 @@ class fixedPoint(packetToken):
         fractionalBits -- number of fractionalBits. Y in X.Y.
         
         Note that integerBits + fractionalBits will be packed into the smallest possible number of bytes.
-        Ideally integerBits + fractionalBits + 1 (sign bit) is divisible by 8.
+        It is assumed that the leftmost interger bit is the sign bit. IF THE INTEGER BIT IS ZERO, THE NUMBER IS TREATED AS UNSIGNED!
+        Ideally integerBits + fractionalBits is divisible by 8.
         """
         self.integerBits = integerBits
         self.fractionalBits = fractionalBits
-        self.size = int(math.ceil((integerBits + fractionalBits)/8.0))   #smallest number of bytes that will contain the fixed-point format.
+        self.bitSize = integerBits + fractionalBits
+        self.size = int(math.ceil((self.bitSize)/8.0))   #smallest number of bytes that will contain the fixed-point format.
     
     def _encode_(self, encodeValue, inProcessPacket):
         """Encodes the provided value into a signed fixed-point decimal."""
         
         bitShiftedValue = encodeValue * 2**self.fractionalBits   #fixed-point encoding is as simple as left-shifting by the fractional bits.
-        twosComplementRepresentation = utilities.signedIntegerToTwosComplement(int(bitShiftedValue), self.size) # convert to twos complement
+        if self.integerBits > 0:    #signed value
+            twosComplementRepresentation = utilities.signedIntegerToTwosComplement(int(bitShiftedValue), self.bitSize) # convert to twos complement
+        else:   #no integer bits, unsigned value
+            twosComplementRepresentation = bitShiftedValue
         return utilities.unsignedIntegerToBytes(twosComplementRepresentation, self.size)    #convert to byte list
         
     def _decode_(self, decodePacket):
@@ -715,6 +721,67 @@ class fixedPoint(packetToken):
         decodePacket -- the ordered list of bytes to be converted into a fixed point decimal.
         """
         twosComplementRepresentation = utilities.bytesToUnsignedInteger(decodePacket)
-        signedInteger = utilities.twosComplementToSignedInteger(twosComplementRepresentation, self.size)
+        twosComplementRepresentation = twosComplementRepresentation&(2**(self.bitSize) - 1) #mask off any unwanted bits
+        if self.integerBits > 0: #signed value
+            signedInteger = utilities.twosComplementToSignedInteger(twosComplementRepresentation, self.bitSize)
+        else:   #no integer bits, unsigned value
+            signedInteger = twosComplementRepresentation
         bitShiftedValue = float(signedInteger)/(2**self.fractionalBits)
         return bitShiftedValue
+
+class bitfield(packetToken):
+    """A bitfield packet token."""
+    def init(self, numberOfBits, *bitFieldDefinition):
+        """Initializer for bitfield packet tokens.
+        
+        numberOfBits -- the number of bits in the field
+        bitfield -- the bitfield definition, provided as a series of arguments each containing a tuple of the format (bitPosition, bitName, optionalDefaultValue)
+        """
+        self.numberOfBits = numberOfBits
+        self.size = int(math.ceil(self.numberOfBits/8.0))   #smallest number of bytes that will contain the provided bit size
+        
+        self.bitPositionBitNameDictionary = {}  #stores {position:name} pairs
+        self.bitNameBitPositionDictionary = {}  #stores {name:position} pairs
+        self.bitPositionDefaultValueDictionary = {} #stores {position:defaultValue} pairs
+        for argumentTuple in bitFieldDefinition: #populate the bit map dictionaries
+            bitPosition = argumentTuple[0]
+            bitName = argumentTuple[1]
+            if len(argumentTuple) >2:
+                bitDefaultValue = argumentTuple[2]
+            else:
+                bitDefaultValue = None
+            self.bitPositionBitNameDictionary.update({bitPosition:bitName})
+            self.bitNameBitPositionDictionary.update({bitName:bitPosition})
+            self.bitPositionDefaultValueDictionary.update({bitPosition:bitDefaultValue})
+            
+    def _encode_(self, encodeDictionary, inProcessPacket):
+        """Encodes the provided inputValue into a bitfield.
+        
+        encodeDictionary -- a dictionary containing bitName:bitValue pairs to encode into the bitfield
+        """
+        outputValue = 0 #default bit field is zeroed out.
+        for bitName in self.bitNameBitPositionDictionary:   #iterate thru stored bitfield definition
+            bitPosition = self.bitNameBitPositionDictionary[bitName]    #get bit position
+            if bitName in encodeDictionary: #check if bitName is in the provided encode dictionary
+                bitValue = encodeDictionary[bitName]    #bitName is in encodeDictionary, set bitValue from encodeDictionary
+            elif self.bitPositionDefaultValueDictionary[bitPosition] != None:   #check if a default bit value was provided on token creation
+                bitValue = self.bitPositionDefaultValueDictionary[bitPosition]  #Bit value not specified in input, use default value instead
+            else:
+                bitValue = False    #by default set to 0
+                
+            outputValue = utilities.changeBitInInteger(outputValue, bitPosition, bitValue)
+        
+        return utilities.unsignedIntegerToBytes(outputValue, self.size)
+    
+    def _decode_(self, decodePacket):
+        """Decodes the provided packet snippet into a dictionary of bitfield names and values.
+        
+        decodePacket -- the ordered list of bytes to be converted into a dictionary.
+        """
+        inputValue = utilities.bytesToUnsignedInteger(decodePacket)
+        decodeDictionary = {}   #stores bitName:bitValue pairs
+        for bitPosition in self.bitPositionBitNameDictionary:   #iterate over all bit positions in bitfield definition
+            bitName = self.bitPositionBitNameDictionary[bitPosition]    #grab bit name
+            bitValue = bool(inputValue&(1<<bitPosition))    #test if bit in inputValue is set
+            decodeDictionary.update({bitName:bitValue})    #update the decode dictionary
+        return decodeDictionary

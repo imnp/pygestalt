@@ -105,31 +105,31 @@ def bytesToUnsignedInteger(byteList):
     return value
 
 
-def signedIntegerToTwosComplement(integer, size):
+def signedIntegerToTwosComplement(integer, bitSize):
     """Converts a signed integer into an unsigned two's complement representation.
     
     integer -- the number to be converted.
-    size -- the length in bytes of the two's complement number to be returned.
+    bitSize -- the length in bits of the two's complement number to be returned.
     """
-    maxSize = (256**size)/2 - 1
+    maxSize = (2**bitSize)/2 - 1
     if abs(integer) > maxSize: #integer cannot be expressed in size
         raise ValueError("Cannot convert signed integer to twos complement. Input value of " + str(integer) + " exceeds maximum size (+/- " + str(maxSize)+").") 
     if integer >= 0: return int(integer) #integer is positive, so nothing needs to be done.
     else:
-        allOnes = 256**size - 1 # fills size bytes with all ones
+        allOnes = 2**bitSize - 1 # fills bitSize bits with all ones
         return (allOnes^abs(int(integer))) + 1  #inverts just the bits comprising the original number, and adds one. This is two's complement!
 
-def twosComplementToSignedInteger(twosComplement, size):
+def twosComplementToSignedInteger(twosComplement, bitSize):
     """Converts a twos-complement representation into a signed integer.
      
     twos-complement -- the number to be converted.
-    size -- the length in bytes of the two's complement input.
+    bitSize -- the length in bits of the two's complement input.
     """
            
-    signBitPosition = (size*8) - 1    #sign bit is the most significant bit
+    signBitPosition = bitSize - 1    #sign bit is the most significant bit
     signBit = 2**signBitPosition    #a single bit in the MSB position
     if(signBit & twosComplement):   #number is negative, need to take two's complement
-        allOnes = 256**size - 1 # fills size bytes with all ones
+        allOnes = 2**bitSize - 1 # fills size bytes with all ones
         return -((twosComplement - 1)^allOnes)   #subtract one then flip bits, the is the inverse of encoding process.
     else:
         return twosComplement #positive number, no need to do anything.
@@ -152,6 +152,21 @@ def listToString(inputList):
 def stringToList(inputString):
     """Convert a string into a list of integers."""
     return [ord(i) for i in inputString]
+
+def changeBitInInteger(integer, bitPosition, bitValue):
+    """Modifies a provided integer by either setting or clearing a specified bit.
+    
+    integer -- the number in which to modify a bit
+    bitPosition -- the position of the bit in the integer, starting with the LSB = 0
+    bitValue -- the value to which the bit should be changed, either True or False
+    
+    returns the modified integer.
+    """
+    shiftedBitValue = 1<<bitPosition
+    if bitValue:
+        return (integer | shiftedBitValue)
+    else:
+        return (integer & ~shiftedBitValue)
 
 class CRC():
     """Generates and validates CRC values."""

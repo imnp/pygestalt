@@ -11,24 +11,48 @@ import time
 
 # Define Packets
 # payloadTestPacket = packets.template('port5Default')
-payloadTestPacket = packets.template('payloadTestPacket',
-                                     packets.unsignedInt('xPosition', 2),
-                                     packets.signedInt('yPosition', 2),
-                                     packets.fixedPoint('pressureSensor', 0,15),
-                                     packets.pString('URL'))
-
-gestaltPacket = packets.template('gestaltPacketTemplate',
-                                       packets.unsignedInt('_startByte_',1),
-                                       packets.unsignedInt('_address_', 2),
-                                       packets.unsignedInt('_port_', 1),
-                                       packets.length('_length_'),
-                                        packets.packet('_payload_'),
-                                       packets.checksum('_checksum_'))
-
-
+# payloadTestPacket = packets.template('payloadTestPacket',
+#                                      packets.unsignedInt('xPosition', 2),
+#                                      packets.signedInt('yPosition', 2),
+#                                      packets.fixedPoint('pressureSensor', 0,16),
+#                                      packets.pString('URL'))
 # 
+# gestaltPacket = packets.template('gestaltPacketTemplate',
+#                                        packets.unsignedInt('_startByte_',1),
+#                                        packets.unsignedInt('_address_', 2),
+#                                        packets.unsignedInt('_port_', 1),
+#                                        packets.length('_length_'),
+#                                         packets.packet('_payload_'),
+#                                        packets.checksum('_checksum_'))
+# 
+# 
+#  
 # payloadDict = {'xPosition':1025, 'yPosition':-1024, 'pressureSensor':-0.99999, 'URL':'www.fabunit.com'}
 # encodedPayloadPacket = payloadTestPacket.encode(payloadDict)
+
+fixedPointTestPacket = packets.template('fixedTest',
+                                        packets.fixedPoint('pressureSensor', 1,11))
+encodedPacket = fixedPointTestPacket.encode({'pressureSensor':-0.9999999})
+decimalValue = utilities.bytesToUnsignedInteger(encodedPacket)
+print decimalValue
+print fixedPointTestPacket.decode(encodedPacket)
+
+# bitFieldTestPacket = packets.template('bitFieldTest',
+#                                       packets.bitfield('myBitField', 8, (0,'bitO', True),
+#                                                                         (1,'bit1', True),
+#                                                                         (2,'bit2', True),
+#                                                                         (3,'bit3', True),
+#                                                                         (4,'bit4', False),
+#                                                                         (5,'bit5', False),
+#                                                                         (6,'bit6', False),
+#                                                                         (7,'bit7', False)))
+# encodedPacket = bitFieldTestPacket.encode({'myBitField':{'bit0':True,'bit1':False, 'bit2':True,'bit3':False,'bit4':True, 'bit5':False,'bit6':True}})
+# print encodedPacket
+# 
+# print bitFieldTestPacket.decode(encodedPacket)
+
+
+
 #  
 # gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':encodedPayloadPacket}
 # gestaltDict = {'_startByte_':72, '_address_':1, '_port_':72, '_payload_':[]}
@@ -82,26 +106,26 @@ config.syntheticModeOn()    #turn on synthetic mode
 
 # # The code below tests whether actionObject classes are being copied
 
-serialInterface = interfaces.serialInterface('/dev/tty.usbserial-AH013FH0')
-
-
-myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode", interface = serialInterface)
+# serialInterface = interfaces.serialInterface('/dev/tty.usbserial-AH013FH0')
+# 
+# 
+# myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode", interface = serialInterface)
 # myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
-print myGestaltNode._virtualNode_
-myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
-  
-print myGestaltNode.statusRequest()
-  
-  
-  
-print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
-print myGestaltNode.bootReadRequest(pageNumber = 127)
-print myGestaltNode.urlRequest()
-print myGestaltNode.setAddressRequest(1025)
-print myGestaltNode.synNodeAddress
-print myGestaltNode.identifyRequest()
-print myGestaltNode.resetRequest()
-print myGestaltNode
+# print myGestaltNode._virtualNode_
+# myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
+#   
+# print myGestaltNode.statusRequest()
+#   
+#   
+#   
+# print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
+# print myGestaltNode.bootReadRequest(pageNumber = 127)
+# print myGestaltNode.urlRequest()
+# print myGestaltNode.setAddressRequest(1025)
+# print myGestaltNode.synNodeAddress
+# print myGestaltNode.identifyRequest()
+# print myGestaltNode.resetRequest()
+# print myGestaltNode
 # class myGestaltNode(nodes.gestaltNode):
 #     def init(self):
 #         print "myGestaltNode init"
