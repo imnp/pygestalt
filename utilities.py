@@ -168,6 +168,17 @@ def changeBitInInteger(integer, bitPosition, bitValue):
     else:
         return (integer & ~shiftedBitValue)
 
+def fuzzyEquals(number1, number2, tolerance):
+    """Returns True if both provided numbers are within a specified distance.
+    
+    number1, number2 -- the two numbers to be compared
+    tolerance -- the maximum distance between both numbers in order to consider them equal.
+    """
+    delta = abs(number1-number2)
+    if abs(delta)< tolerance:
+        return True
+    else: return False
+    
 class CRC():
     """Generates and validates CRC values."""
     def __init__(self, polynomial = 7):

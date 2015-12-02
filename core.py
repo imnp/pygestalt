@@ -41,7 +41,14 @@ class actionObject(object):
         Any arguments are passed along to the subclass's init() function, which may either return a value or None.
         If nothing is returned, as is the case in typical __init__ methods, then we return the actionObject. But
         if a return value is provided by the user (i.e. the interpreted reply of a real node), this is passed along.
+        
+        Note that if a call is made to the actionObject before it is bound to a port, a notice will be issued and
+        a None object will be returned.
         """
+        if cls.virtualNode == None: #check to make sure the actionObject is bound
+            notice(cls.__name__, "Can not instantiate actionObject because it isn't bound to a port on a virtual node!")   #not bound! give notice
+            return None #not bound, return None
+        
         newActionObject = object.__new__(cls)   #creates the new actionObject
         newActionObject._init_()    #runs the actionObject base class's initialization. Note that
                                     #__init__ is intentionally not used, because otherwise it would get called twice.

@@ -32,7 +32,7 @@ import time
 
 fixedPointTestPacket = packets.template('fixedTest',
                                         packets.fixedPoint('pressureSensor', 1,11))
-encodedPacket = fixedPointTestPacket.encode({'pressureSensor':-0.9999999})
+encodedPacket = fixedPointTestPacket.encode({'pressureSensor':0.95})
 decimalValue = utilities.bytesToUnsignedInteger(encodedPacket)
 print decimalValue
 print fixedPointTestPacket.decode(encodedPacket)
