@@ -27,7 +27,7 @@ class serialInterface(baseInterface):
     def __init__(self, port = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
         """Initializes a serial communications port.
         
-        portName -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
+        port -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
         baudRate -- the communications speed to be used. Default is 115200 baud.
         interfaceType -- a string keyword to help search for the port. Types include 'ftdi' and 'lufa'
         name -- an optional name to provide to the interface
@@ -173,7 +173,7 @@ class serialInterface(baseInterface):
             self.transmitter.putPacketInTransmitQueue(packet)    #put data packet into the transmission queue
             return True
         else:
-            notice(self, str(self.portName)+ " is not connected!")
+            notice(self, str(self.portPath)+ " is not connected!")
             return False
     
     def receive(self):
@@ -186,7 +186,7 @@ class serialInterface(baseInterface):
             try:
                 return self.port.read(size = 1) #reads a single byte from the serial port. If empty will wait timeout period established on port instantiation, then returns ''
             except: #likely that port closed while waiting to receive
-                notice(self.interface, "Lost connection to serial port " + str(self.interface.portName))
+                notice(self.interface, "Lost connection to serial port " + str(self.interface.portPath))
                 self.isConnectedFlag.clear()    #mark that port is closed. It will need to be reopened by the transmit thread.
                 return None
         else:
@@ -225,8 +225,8 @@ class serialInterface(baseInterface):
                         try:
                             self.interface.port.write(packet.toString())
                         except: #IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
-                            self.interface.port.isConnectedFlag.clear() #port is no longer connected
-                            notice(self.interface, "Lost connection to serial port " + str(self.interface.portName))
+                            self.interface.isConnectedFlag.clear() #port is no longer connected
+                            notice(self.interface, "Lost connection to serial port " + str(self.interface.portPath))
                         time.sleep(self.interface._threadIdleTime_) #idle
                 else:   #port isn't connected, attempt to reconnect
                     time.sleep(self.interface._portReconnectTime_)
