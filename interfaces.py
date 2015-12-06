@@ -227,7 +227,7 @@ class serialInterface(baseInterface):
                         except: #IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
                             self.interface.isConnectedFlag.clear() #port is no longer connected
                             notice(self.interface, "Lost connection to serial port " + str(self.interface.portPath))
-                        time.sleep(self.interface._threadIdleTime_) #idle
+                    time.sleep(self.interface._threadIdleTime_) #idle
                 else:   #port isn't connected, attempt to reconnect
                     time.sleep(self.interface._portReconnectTime_)
                     self.interface.connect()    #attempt to reconnect         
