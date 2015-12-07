@@ -24,11 +24,11 @@ class baseInterface(object):
 class serialInterface(baseInterface):
     """The base class for all serial port interfaces."""
     
-    def __init__(self, port = None, baudRate = 115200, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
+    def __init__(self, port = None, baudrate = None, interfaceType = None, name = None, timeout = 0.1, flowControl = None):
         """Initializes a serial communications port.
         
         port -- the system name of the port, e.g. 'tty.usbserial*' on a Mac, or 'COM0' on Windows
-        baudRate -- the communications speed to be used. Default is 115200 baud.
+        baudrate -- the communications speed to be used. Default is 115200 baud.
         interfaceType -- a string keyword to help search for the port. Types include 'ftdi' and 'lufa'
         name -- an optional name to provide to the interface
         timeout -- receiver timeout in seconds before returning '' if no data has been received
@@ -39,7 +39,12 @@ class serialInterface(baseInterface):
     
         self.providedPortPath = port    #the full path of the port provided on instantiation
         self.portPath = port    #the full path of the port last connected to. This can be automatically changed by the connect method
-        self.baudRate = baudRate
+        
+        self.providedBaudrate = baudrate    #the connection baud rate as provided by the user
+        self.baudrate = baudrate    #the actively used baudrate
+        self.defaultBaudrate = 115200   #This is the baud rate used for all custom-made gestalt nodes
+        if self.baudrate == None: self.baudrate = self.defaultBaudrate
+            
         self.interfaceType = interfaceType
         self.providedName = name    #the name as provided by the user. If None, indicates that it's OK to auto-set _name_ to the port name.
         self._name_ = name
@@ -52,6 +57,20 @@ class serialInterface(baseInterface):
         self._threadIdleTime_ = 0.0005  #seconds, time for thread to idle between runs of loop
         self._portReconnectTime_ = 5    #seconds, time between attempts to reconnect to a down port.
         
+    def updateBaudrateIfDefault(self, newBaudrate):
+        """Updates the baud rate if no baud rate was provided on instantiation.
+        
+        This method will update the connection's baud rate, but only if no baudrate was provided by the user on instantiation.
+        If a connection hasn't yet been started, this just changes the self.baudrate property. If a connection is already open,
+        the currently active baud rate of the connection will be changed.
+        """    
+        if self.providedBaudrate == None:   #No baud rate was provided by user; OK to change the baud rate here
+            self.baudrate = newBaudrate    #log the new baud rate
+            if self.isConnected():  #currently connected
+                self.port.setBaudrate(newBaudrate) #update the current baudrate
+            return True
+        else:   #The user provided a baud rate, so don't change it!
+            return False
         
     def start(self):
         """Connects the interface to a hardware port and starts the transmitter thread."""
@@ -128,7 +147,7 @@ class serialInterface(baseInterface):
         """
         if self.isConnected(): self.disconnect  #close any open connection
         try:
-            self.port = serial.Serial(portPath, self.baudRate, timeout = self.timeout) #Connect to the serial port
+            self.port = serial.Serial(portPath, self.baudrate, timeout = self.timeout) #Connect to the serial port
             self.port.flushInput()  #do some spring cleaning
             self.port.flushOutput()
             time.sleep(2)   #some ports require a brief amount of time between opening and transmission

@@ -30,12 +30,12 @@ import time
 # payloadDict = {'xPosition':1025, 'yPosition':-1024, 'pressureSensor':-0.99999, 'URL':'www.fabunit.com'}
 # encodedPayloadPacket = payloadTestPacket.encode(payloadDict)
 
-fixedPointTestPacket = packets.template('fixedTest',
-                                        packets.fixedPoint('pressureSensor', 1,11))
-encodedPacket = fixedPointTestPacket.encode({'pressureSensor':0.95})
-decimalValue = utilities.bytesToUnsignedInteger(encodedPacket)
-print decimalValue
-print fixedPointTestPacket.decode(encodedPacket)
+# fixedPointTestPacket = packets.template('fixedTest',
+#                                         packets.fixedPoint('pressureSensor', 1,11))
+# encodedPacket = fixedPointTestPacket.encode({'pressureSensor':0.95})
+# decimalValue = utilities.bytesToUnsignedInteger(encodedPacket)
+# print decimalValue
+# print fixedPointTestPacket.decode(encodedPacket)
 
 # bitFieldTestPacket = packets.template('bitFieldTest',
 #                                       packets.bitfield('myBitField', 8, (0,'bitO', True),
@@ -102,22 +102,26 @@ print fixedPointTestPacket.decode(encodedPacket)
 # x = getTuna('charlie')
 # print x
 
-config.syntheticModeOn()    #turn on synthetic mode
+# config.syntheticModeOn()    #turn on synthetic mode
 
 # # The code below tests whether actionObject classes are being copied
 
-# serialInterface = interfaces.serialInterface('/dev/tty.usbserial-AH013FH0')
+# serialInterface = interfaces.serialInterface('/dev/tty.usbmodem1451')
+# gestaltInterface = interfaces.gestaltInterface('myGestaltInterface', interface = serialInterface)
 # 
 # 
+# config.verboseDebugOn()
+# myGestaltNode = nodes.arduinoGestaltNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
 # myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode", interface = serialInterface)
 # myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 # print myGestaltNode._virtualNode_
-# myGestaltNode = nodes.gestaltNode(name = "myGestaltNode")
+myGestaltNode = nodes.arduinoGestaltVirtualNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
+# myGestaltNode = nodes.arduinoGestaltNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
 #   
-# print myGestaltNode.statusRequest()
-#   
-#   
-#   
+print myGestaltNode.statusRequest()
+   
+   
+#    
 # print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
 # print myGestaltNode.bootReadRequest(pageNumber = 127)
 # print myGestaltNode.urlRequest()

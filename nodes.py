@@ -21,13 +21,13 @@ class baseVirtualNode(object):
         """
         pass
 
-class baseGestaltNode(baseVirtualNode):
+class baseGestaltVirtualNode(baseVirtualNode):
     """Base class for Gestalt nodes."""
 
     def __new__(cls, *args, **kwargs):
-        """Instantiation routine for baseGestaltNode base class.
+        """Instantiation routine for baseGestaltVirtualNode base class.
         
-        When a call is made to the baseGestaltNode class, this "magic" function creates the instance.
+        When a call is made to the baseGestaltVirtualNode class, this "magic" function creates the instance.
         It is necessary to define a custom __new__ to support nodes updating themselves on instantiation.
         The object returned by this function may not be the original node instance, but one created recursively.
         """
@@ -163,6 +163,8 @@ class baseGestaltNode(baseVirtualNode):
         newAddress = self._interface_.attachNode(self)    #attach node to interface.
         
         if newAddress: #A new address was provided, therefor must associate
+            if isinstance(self, networkedGestaltVirtualNode):    #only display association message if node is a networked gestalt type node.
+                notice(self, "Please identify me on the network!")
             self.setAddressRequest(newAddress) #set node address to newAddress
                 
     def _isInSyntheticMode_(self):
@@ -181,7 +183,7 @@ class baseGestaltNode(baseVirtualNode):
         """Attempts to replace virtual node instance residing inside _shell_ (e.g. self) with an updated version as referenced by the physical node's URL.
         
         This is perhaps one of the weirder initialiation steps of the Gestalt node. As has been discussed previously, when a virtual node is first initialized and
-        before it has communicated with its physical node, a default base class (nodes.gestaltNode) is used. The base class contains just the functionality
+        before it has communicated with its physical node, a default base class (nodes.gestaltVirtualNode) is used. The base class contains just the functionality
         to retreive a URL from the physical node that points to a feature-complete virtual node matching the physical node. _updateVirtualNode_ handles
         retrieving the URL and attempting to instantiate a new virtual node using the referenced file. If successful, this function will replace the base
         virtual node with the retrieved version. All of this is predicated on the node having been instantiated within a shell, and without a source being
@@ -353,7 +355,7 @@ class baseGestaltNode(baseVirtualNode):
         else:
             return False
     
-class gestaltNode(baseGestaltNode):
+class gestaltVirtualNode(baseGestaltVirtualNode):
     """The standard Gestalt node class.
     
     This class defines the standard functionality that any gestalt node must exhibit, including:
@@ -361,12 +363,12 @@ class gestaltNode(baseGestaltNode):
     - setting the node address
     - coming out of bootloader mode (if applicable)
     
-    The key distinction between gestaltNode and baseGestaltNode is that gestaltNode is written
+    The key distinction between gestaltVirtualNode and baseGestaltVirtualNode is that gestaltVirtualNode is written
     exactly the same way that a user of the library would write their own virtual nodes. All of the hidden
-    functionality is captured in baseGestaltNode. The intention is that this class gets subclassed by all
+    functionality is captured in baseGestaltVirtualNode. The intention is that this class gets subclassed by all
     Gestalt virtual nodes.
     """
-    def init(self):
+    def init(self, *args, **kwargs):
         """Initialiation routine for gestalt node."""
         self.bootPageSize = 128     #bootloader page size in bytes
         self.bootloaderSupport = True   #default is that node supports a bootloader. For arduino-based nodes this should be set to false by the child node.
@@ -748,6 +750,53 @@ class gestaltNode(baseGestaltNode):
             notice(self.virtualNode, "SYNTHETIC node has been reset")
             pass
 
+class soloGestaltVirtualNode(gestaltVirtualNode):
+    """A gestalt node subclass that is not on a network bus with other nodes."""
+    pass
+    
+    
+class arduinoGestaltVirtualNode(soloGestaltVirtualNode):
+    """A gestalt node subclass that automatically sets the appropriate baud rate to talk with arduino-based Gestalt nodes.
+    
+    Custom-made Gestalt nodes use a 18.432MHz crystal to eliminate timing errors at all standard baud rates.
+    However, the Arduino Uno and equivalents ships with a 16MHz crystal, so the firmware uses a 38400 baud rate.
+    This rate has the lowest error of speeds that are well-supported on all operating systems. (Initially tried 76800,
+    which worked well on a Mac but not on Linux.)
+    """
+    def init(self, *args, **kwargs):
+        #need to provide a default interface, or update the baud rate in a serial interface was specified manually
+        if self._interface_ == None: #no interface was provided, create a new serial interface
+            if 'port' in kwargs:    #a port path was provided, use that
+                portPath = kwargs['port']
+            else:
+                portPath = None
+            self.setDefaultInterface(interfaces.serialInterface(port = portPath, baudrate = 38400))
+            
+        elif type(self._interface_) == interfaces.serialInterface:  #a serial interface was provided
+            self._interface_.updateBaudrateIfDefault(38400) #attempt to change the default baudrate
+            if self._interface_.baudrate != 38400:  #check the baudrate. If it doesn't match, then an incorrect user-provided baudrate supersceded the above call.
+                notice(self, "NOTICE: The user-provided baudrate of " + str(self._interface_.baudrate) + " is not standard for the Arduino Gestalt Library.")
+        
+        elif type(self._interface_) == interfaces.gestaltInterface: #a gestalt interface was provided
+            interface = self._interface_._interface_
+            if type(interface) == interfaces.serialInterface:
+                interface.updateBaudrateIfDefault(38400)
+                if interface.baudrate != 38400:  #check the baudrate. If it doesn't match, then an incorrect user-provided baudrate supersceded the above call.
+                    notice(self, "NOTICE: The user-provided baudrate of " + str(interface.baudrate) + " is not standard for the Arduino Gestalt Library.")
+            else: #some other interface was provided
+                notice(self, "NOTICE: Unable to confirm that the provided interface's baud rate is appropriate for the Arduino Gestalt Library")
+                
+        else: #some other interface was provided
+            notice(self, "NOTICE: Unable to confirm that the provided interface's baud rate is appropriate for the Arduino Gestalt Library")
+
+class networkedGestaltVirtualNode(gestaltVirtualNode):
+    """A gestalt node subclass that is on a network bus with other nodes.
+    
+    This has implications for how the node associates with its virtual node counterpart, and in particular means that a message with the node
+    name should be displayed on association, to notify the user that they need to press a button.
+    """
+    pass
+    
 class nodeShell(object):
     """A virtual node container to support hot-swapping virtual nodes while maintaining external references.
     
@@ -811,7 +860,7 @@ class nodeShell(object):
         #Define shell flags
         self._nodeLoaded_ = False  #this flag keeps track of whether a virtual node (not including default nodes) has been loaded into the shell.
                                         #Used to prevent the virtual node from cyclically reloading itself over and over if for some reason it is of the
-                                        #gestaltNode type (and not a user-created subclass).
+                                        #gestaltVirtualNode type (and not a user-created subclass).
 
         self._virtualNode_ = False  #this is where a reference to the virtual node instance will get stored. Default is False until virtual node successfully loaded.
 
@@ -947,7 +996,7 @@ class gestaltNodeShell(nodeShell):
     """The base node shell for gestalt-based nodes."""
     def _shellInit_(self, *args, **kwargs):
         if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
-            self._virtualNode_ = gestaltNode(*args, **kwargs)
+            self._virtualNode_ = gestaltVirtualNode(*args, **kwargs)
 
 class soloGestaltNode(gestaltNodeShell):
     """The node shell type for solo (non-networked) gestalt nodes.
@@ -956,3 +1005,14 @@ class soloGestaltNode(gestaltNodeShell):
     solo and networked gestalt nodes at the base virtual node level.
     """
     pass
+
+class arduinoGestaltNode(gestaltNodeShell):
+    """The node shell type for arduino-based gestalt nodes.
+    
+    This container is modified slightly from the gestaltNodeShell because it defaults to a arduino gestalt node
+    if no virtual node source is provided by the user.
+    
+    """
+    def _shellInit_(self, *args, **kwargs):
+        if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
+            self._virtualNode_ = arduinoGestaltVirtualNode(*args, **kwargs)    
