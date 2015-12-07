@@ -756,13 +756,17 @@ class soloGestaltVirtualNode(gestaltVirtualNode):
     
     
 class arduinoGestaltVirtualNode(soloGestaltVirtualNode):
-    """A gestalt node subclass that automatically sets the appropriate baud rate to talk with arduino-based Gestalt nodes.
+    """A gestalt node subclass that automatically sets the appropriate serial interface and baud rate to talk with arduino-based Gestalt nodes.
     
-    Custom-made Gestalt nodes use a 18.432MHz crystal to eliminate timing errors at all standard baud rates.
+    Custom-made Gestalt nodes typically use a 18.432MHz crystal to eliminate timing errors at all standard baud rates.
     However, the Arduino Uno and equivalents ships with a 16MHz crystal, so the firmware uses a 38400 baud rate.
-    This rate has the lowest error of speeds that are well-supported on all operating systems. (Initially tried 76800,
+    This rate has the lowest error of all speeds that are well-supported on all operating systems. (Initially tried 76800,
     which worked well on a Mac but not on Linux.)
+    
+    While the standard gestalt node class does not automatically create a serial interface, knowing that this virtual
+    node is an arduino means we can assume it is communicating over a USB to Serial adapter of not otherwise specified.
     """
+    
     def init(self, *args, **kwargs):
         #need to provide a default interface, or update the baud rate in a serial interface was specified manually
         if self._interface_ == None: #no interface was provided, create a new serial interface
