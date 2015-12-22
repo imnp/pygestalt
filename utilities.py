@@ -48,9 +48,9 @@ def objectIdentifier(callingObject):
         if name:    #name is not False (or None)
             return name #just return the name
         else:   #name is False or None
-            return str(callingObject) #_name_ is None or False, return the object str representation
+            return callingObject.__class__.__name__ + " @ " + hex(id(callingObject)) #_name_ is None or False, return a reinterpretation of the str representation
     else:
-        return str(callingObject) #no _name_ attribute, return the object str representation   
+        return callingObject.__class__.__name__ + " @ " + hex(id(callingObject)) #no _name_ attribute, return a reinterpretation of the object str representation   
     
     
 def notice(callingObject, noticeString):

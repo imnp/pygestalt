@@ -106,7 +106,10 @@ import time
 
 # # The code below tests whether actionObject classes are being copied
 
-# serialInterface = interfaces.serialInterface('/dev/tty.usbmodem1451')
+serialInterface = interfaces.serialInterface()
+serialInterface.connect()
+
+
 # gestaltInterface = interfaces.gestaltInterface('myGestaltInterface', interface = serialInterface)
 # 
 # 
@@ -115,11 +118,12 @@ import time
 # myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode", interface = serialInterface)
 # myGestaltNode = nodes.gestaltNodeShell(name = "myGestaltNode")
 # print myGestaltNode._virtualNode_
-myGestaltNode = nodes.arduinoGestaltVirtualNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
+# myGestaltNode = nodes.arduinoGestaltVirtualNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
 # myGestaltNode = nodes.arduinoGestaltNode(name = "myGestaltNode", port = "/dev/tty.usbmodem1451")
 #   
-print myGestaltNode.statusRequest()
-   
+# print myGestaltNode.statusRequest()
+
+
    
 #    
 # print myGestaltNode.bootWriteRequest(pageNumber = 0, data = range(128))
