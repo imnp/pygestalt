@@ -1,0 +1,5 @@
+use cases
+1) import myNode.py
+2) myNode = nodes.soloGestaltNode(interface = myInterface)
+
+I think it makes the most sense to move the logic of node acquisition over to the interface from the shell. After all it is here that the nodes are managed. If this change is made, the only role of the node shell will be to load from a variety of sources, and to pass along calls. This means that all types of nodes use the same node shell, and the big difference between a solo/independent node and a solo/gestalt or networked node will be in the interface rather than in the shell. Will also simplify the concept of the shell. Another implication is that nodes can be used without shells, which makes a lot of sense if you already have the file present and don't need to swap. Functions related to swapping should exist only in the shell and in the interface if at all possible. This will be an experiment!

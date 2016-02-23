@@ -7,3 +7,6 @@ class Error(Exception):
 
 class CompositionError(Error):
     pass
+
+class UnitError(Error):
+    pass

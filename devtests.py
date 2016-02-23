@@ -6,6 +6,7 @@ from pygestalt import core
 from pygestalt import nodes
 from pygestalt import config
 from pygestalt import interfaces
+from pygestalt import units
 import copy
 import time
 
@@ -106,8 +107,8 @@ import time
 
 # # The code below tests whether actionObject classes are being copied
 
-serialInterface = interfaces.serialInterface()
-serialInterface.connect()
+# serialInterface = interfaces.serialInterface()
+# serialInterface.connect()
 
 
 # gestaltInterface = interfaces.gestaltInterface('myGestaltInterface', interface = serialInterface)
@@ -141,4 +142,9 @@ serialInterface.connect()
 #         print "myGestaltNode onLoad"
          
 
-time.sleep(2)
+# --UNITS--
+myNumber = units.mm(1.243)
+
+print myNumber
+
+# time.sleep(2)
