@@ -33,6 +33,15 @@ class unitDict(dict):
         for thisUnit in hitList:
             self.pop(thisUnit)
     
+    def __neg__(self):
+        """Overrides the negative operator to invert the powers of the contained units."""
+        newUnitDict = unitDict(self)    #create new copy
+        for key in newUnitDict:  #invert powers of all units
+            newUnitDict[key] *= -1
+        return newUnitDict
+        
+        
+    
     def __init__(self, value):
         """Initialization function for unit dictionary"""
         dict.__init__(self, value)
@@ -61,7 +70,7 @@ class unitDict(dict):
         if denominatorUnitList != []: returnString += '/' #add trailing /
          
         for denominatorUnit in denominatorUnitList: #iterate over all units in denominator
-            if self[denominatorUnit] < 1: #more than to the first power
+            if self[denominatorUnit] < -1: #more than to the first power
                 returnString += denominatorUnit.abbreviation + '^' + str(-self[denominatorUnit]) + '*'
             else:
                 returnString += denominatorUnit.abbreviation + '*'
@@ -69,10 +78,6 @@ class unitDict(dict):
         if denominatorUnitList != []: returnString = returnString[:-1] #remove trailing *
          
         return returnString
-        
-        
-        
-    
 
 class unit(object):
     """The base class for all measurement units."""
@@ -130,7 +135,50 @@ class dFloat(float):
         
         return str(float(self)) + ' ' + str(self.units)
     
+    #--- OVERRIDE MATH FUNCTIONS ---
+    def __mul__(self, other):
+        """Overrides left-hand multiplication.
+        
+        other -- right-hand number to be multiplied.
+        """
+        value = float(self) * float(other) #perform numerical multiplication
+        units = unitDict(self.units) #copy units dictionary
+        if type(other) == dFloat: #mix in units of other operand units
+            units.update(other.units)
+        return dFloat(value, units)
     
+    def __rmul__(self, other):
+        """Overrides right-hand multiplication.
+        
+        other -- left-hand number to be multiplied.
+        
+        Note that this will only be called if the left-hand number is not a dFloat.
+        """
+        value = float(other) * float(self)
+        return dFloat(value, self.units)
+    
+    def __div__(self, other):
+        """Overrides left-hand division.
+        
+        other -- the right-hand number to be divided by.
+        """
+        value = float(self)/ float(other) #perform numerical division
+        units = unitDict(self.units) #copy units dictionary
+        if type(other) == dFloat: #mix in inverse of right-hand operand units
+            units.update(-other.units)
+        return dFloat(value, units)
+    
+    def __rdiv__(self, other):
+        """Ovverides right-hand division.
+        
+        other -- the left-hand number to divide.
+        
+        Note that this will only be called if the left-hand number is not a dFloat.
+        """
+        value = float(other) / float(self)
+        return dFloat(value, -self.units)   #inverted unit powers
+    
+        
 #--- DEFINE UNITS HERE ---
 
 # distance
@@ -150,3 +198,4 @@ oz = unit('oz', 'ounces')
 # angle
 rad = unit('rad', 'radians')
 deg = unit('deg', 'degrees')
+rev = unit('rev', 'revolutions')

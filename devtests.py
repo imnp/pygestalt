@@ -144,7 +144,9 @@ import time
 
 # --UNITS--
 myNumber = units.mm(1.243)
+myNumberTwo = units.mm(0.5)
+myNumberThree = units.mm(2)
 
-print myNumber
+print 2/myNumberThree/myNumberTwo
 
 # time.sleep(2)
