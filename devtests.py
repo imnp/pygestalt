@@ -147,6 +147,7 @@ myNumber = units.mm(1.243)
 myNumberTwo = units.mm(0.5)
 myNumberThree = units.mm(2)
 
-print 2/myNumberThree/myNumberTwo
+print myNumberThree * myNumberThree
+print myNumberThree ** 2
 
 # time.sleep(2)

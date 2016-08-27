@@ -764,7 +764,7 @@ class arduinoGestaltVirtualNode(soloGestaltVirtualNode):
     which worked well on a Mac but not on Linux.)
     
     While the standard gestalt node class does not automatically create a serial interface, knowing that this virtual
-    node is an arduino means we can assume it is communicating over a USB to Serial adapter of not otherwise specified.
+    node is an arduino means we can assume it is communicating over a USB to Serial adapter if not otherwise specified.
     """
     
     def init(self, *args, **kwargs):
