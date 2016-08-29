@@ -143,11 +143,46 @@ import time
          
 
 # --UNITS--
-myNumber = units.mm(1.243)
-myNumberTwo = units.mm(0.5)
-myNumberThree = units.mm(2)
+# myNumber = units.mm(1.243)
+# myNumberTwo = units.mm(0.5)
+# myNumberThree = units.mm(2)
+# 
+# print myNumberThree * myNumberThree
+# print myNumberThree ** 2
 
-print myNumberThree * myNumberThree
-print myNumberThree ** 2
+# baseUnits, conversion = units.getBaseUnits(units.yd)
+# print baseUnits.fullName
+# print conversion
+
+# unitDict = units.unitDictionary({units.m:1, units.s:-2})
+# unitDict2 = unitDict / {units.s:2, units.m:-1}
+# print unitDict2
+# 
+# unitDict3 = 1/unitDict
+# print unitDict3
+# 
+# unitDict4 = unitDict**3
+# print unitDict4
+
+# float1 = units.m(1.45)
+# float2 = units.s(4.5)
+# print (float1*float2)
+# 
+# float3 = 1.423*units.N*units.m/units.s**2
+# print float3
+
+# float1 = 4.44*units.m
+# print float1
+# float2 = 7.77*units.s
+# print float2
+
+# print float1 / float2
+
+mySpeed = 100*units.m/units.s**2
+print units.hr**2
+print units.yd/units.hr**2
+print mySpeed
+print units.convertToUnits(mySpeed, units.yd/units.hr**2)
+
 
 # time.sleep(2)
