@@ -7,7 +7,7 @@ It is inefficient and is largely intended to keep things straight and avoid unit
 defining machine kinematics or performing analysis.
 """
 
-import errors
+from pygestalt import errors
 import math
 import copy
 
@@ -218,6 +218,9 @@ class dFloat(float):
     
     def baseUnits(self):
         return reduceToBaseUnits(self)
+    
+    def convert(self, targetUnits):
+        return convertToUnits(self, targetUnits)
     
     #--- OVERRIDE MATH FUNCTIONS ---
     def __add__(self, other):

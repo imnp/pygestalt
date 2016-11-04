@@ -39,6 +39,7 @@ def syntheticMode():
     """
     return getGlobalVariable('syntheticModeFlag')
 
+
 #global verbose debug
 def verboseDebugOn():
     """Sets the global verboseDebug flag to True."""
@@ -55,6 +56,23 @@ def verboseDebug():
     """
     return getGlobalVariable('verboseDebugFlag')
 
+def setDebugChannels(*channelNames):
+    """Enables selected debug channel names.
+    
+    channelNames -- any number of arguments, each of which is a string corresponding to the name of a debug channel to enable.
+                    If no arguments are provided, all channels will be enabled.
+    
+    Only enabled channels will report debug messages.
+    """
+    setGlobalVariable('verboseDebugChannels', channelNames)
+    
+def debugChannelEnabled(debugChannel):
+    """Returns True if a debug channel is enabled"""
+    debugChannels = getGlobalVariable('verboseDebugChannels')
+    return (debugChannels == () or debugChannel in debugChannels)
+    
+
 #Global flags
 syntheticModeOff()
-verboseDebugOff()
+verboseDebugOn()
+setDebugChannels('comm')

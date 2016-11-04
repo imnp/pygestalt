@@ -8,6 +8,7 @@ import math
 import ast
 import datetime
 import itertools
+import sys
 from pygestalt import config
 
 def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parentToChild = True):
@@ -63,12 +64,22 @@ def notice(callingObject, noticeString):
     """
     print "[" + objectIdentifier(callingObject) + "] " + str(noticeString) #print objectRepr: message
 
-def debugNotice(callingObject, channel, noticeString):
+def printToTerminal(text, newLine = True):
+    """Prints text to the terminal window, with or without a carriage return."""
+    if newLine == True: #print with carriage return
+        print text
+    else: #print without carriage return
+        sys.stdout.write(text)
+        sys.stdout.flush()
+
+def debugNotice(callingObject, channel, noticeString, padding = False, newLine = True):
     """If global verbose debug is enabled, this function will print a formatted notice in the terminal window or alternate target.
     
     callingObject -- the instance object making the call
     channel -- a string channel name, which allows filtering debug output if desired (not currently enabled)
     noticeString -- the message to be printed
+    padding -- if true, inserts a carraige return to pad the top of the notice
+    newLine -- if false, will output without a newline character
     
     Currently assigned channels:
         _gestaltInterfaceTransmit_ -- messages from the gestalt interface transmit function
@@ -76,8 +87,12 @@ def debugNotice(callingObject, channel, noticeString):
     
     Returns True if notice was printed (verbose debug is enabled), or False otherwise
     """
-    if config.verboseDebug():
-        print "[" + objectIdentifier(callingObject) + "] " + str(noticeString)
+    if config.verboseDebug() and config.debugChannelEnabled(channel):
+        if padding: print ""
+        if callingObject == None:
+            printToTerminal(str(noticeString), newLine)
+        else:
+            printToTerminal("[" + objectIdentifier(callingObject) + "] " + str(noticeString), newLine)
         return True
     else:
         return False

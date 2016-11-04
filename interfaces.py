@@ -715,7 +715,9 @@ class gestaltInterface(baseInterface):
         encodedPacket = self._gestaltPacket_.encode(packetEncodeDictionary) #encode the complete outgoing packet
         
         actionObjectName = type(actionObject).__name__
-        debugNotice(self, "_gestaltInterfaceTransmit_", actionObjectName + " on port " + str(port) + " (outbound)")
+        debugNotice(None, 'comm', "--- OUTGOING PACKET FROM '" + actionObjectName + "' ---", padding = True)
+        debugNotice(None, 'comm', mode.upper() +" To Address " + str(utilities.unsignedIntegerToBytes(address, 2)) + " on Port "+ str(port))
+        debugNotice(None, 'comm', "ENCODED AS " + str(encodedPacket))
         
         if actionObject.virtualNode._isInSyntheticMode_():   #return a synthetic response
             return self._syntheticResponse_.putInSyntheticQueue(encodedPacket = encodedPacket, syntheticResponseFunction = actionObject._synthetic_)
@@ -815,34 +817,52 @@ class gestaltInterface(baseInterface):
                     self.inProcessPacket += [receivedByte]
                     if self.packetReceiveState == 'waitingOnStartByte': #waiting on the start byte
                         success, startByte = decodeIncompletePacket('_startByte_', self.inProcessPacket)
+                        utilities.debugNotice(None, 'comm', "--- RECEIVER TRIGGERED ---", padding = True)
                         if success: #could successfully decode start byte
                             if (startByte == 72 or startByte == 138):   #start byte is valid
+                                utilities.debugNotice(None, 'comm', "Incoming " + {72:'UNICAST', 138:'MULTICAST'}[startByte] + " Packet")
+                                utilities.debugNotice(None, 'comm', "[Receiver State: waitingOnLengthByte]")
+                                utilities.debugNotice(None, 'comm', "HEADER: ["+ str(startByte) + ",", newLine = False)
                                 self.packetReceiveState = 'waitingOnLengthByte'   #put receiver in next state: wait for address to be received
                                 continue
                             else:
+                                utilities.debugNotice(None, 'comm', "Start Byte " + str(startByte) + " Not Recognized")
+                                utilities.debugNotice(None, 'comm', "--- RECEIVER RESET ---")
                                 self.resetReceiverState() #reset the receiver state, and begin listening again
                                 continue
                         else:   #haven't received the _startByte_ yet. In case for some reason _startByte_ ever becomes a two-byte word. Leaving this interpretation up to the packet.
+                            utilities.debugNotice(None, 'comm', "Start Byte Not Received Correctly")
+                            utilities.debugNotice(None, 'comm', "CONTINUING TO LISTEN...")
                             continue
                         
                     elif self.packetReceiveState == 'waitingOnLengthByte': #waiting on the length
+                        utilities.debugNotice(None, 'comm', str(receivedByte)+",", newLine = False)
                         success, length = decodeIncompletePacket('_length_', self.inProcessPacket)
                         if success:
+                            utilities.debugNotice(None, 'comm', "]")
+                            utilities.debugNotice(None, 'comm', "[Receiver State: waitingToFinish]")
+                            utilities.debugNotice(None, 'comm', "PAYLOAD: [", newLine = False)
                             self.packetReceiveState = 'waitingToFinish'
                             self.packetLength = length + 1  #checksum byte is not included in the figure reported by the length token.
                         continue
                     
                     elif self.packetReceiveState == 'waitingToFinish':
                         if len(self.inProcessPacket) == self.packetLength:  #entire packet has been received
+                            utilities.debugNotice(None, 'comm', "]")
+                            utilities.debugNotice(None, 'comm', "CHECKSUM: " + str(receivedByte))
                             decodedPacket = self.validateAndDecodeInProcessPacket()
                             if decodedPacket: #packet validates against checksum
+                                utilities.debugNotice(None, 'comm', "PACKET RECEIVED SUCCESSFULLY")
                                 self.interface._packetRouter_.putDecodedPacket(decodedPacket)    #convert to packets.serializedPacket type and put the decoded packet in the router queue
                                 self.resetReceiverState()   #reset the receiver state
                                 continue
                             else:   #packet didn't validate, reset the receiver and continue
+                                utilities.debugNotice(None, 'comm', "CHECKSUM DID NOT VALIDATE")
+                                utilities.debugNotice(None, 'comm', "--- RECEIVER RESET ---")
                                 self.resetReceiverState()
                                 continue
                         else:   #haven't reached the end of the packet yet
+                            utilities.debugNotice(None, 'comm', str(receivedByte) + ",", newLine = False)
                             continue
                 else:   #receiver timed out, reset state
                     self.resetReceiverState()

@@ -7,6 +7,7 @@ from pygestalt import nodes
 from pygestalt import config
 from pygestalt import interfaces
 from pygestalt import units
+from pygestalt import geometry
 import copy
 import time
 
@@ -178,11 +179,17 @@ import time
 
 # print float1 / float2
 
-mySpeed = 100*units.m/units.s**2
-print units.hr**2
-print units.yd/units.hr**2
-print mySpeed
-print units.convertToUnits(mySpeed, units.yd/units.hr**2)
+# mySpeed = 100*units.m/units.s**2
+# 
+# print mySpeed.convert(units.m/units.min**2)
+
+# ---MECHANICS---
+myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# myArray[1]
+print myArray[:,0]
+
+
+
 
 
 # time.sleep(2)

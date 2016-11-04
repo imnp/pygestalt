@@ -13,3 +13,6 @@ class UnitError(Error):
 
 class UnitConversionError(Error):
     pass
+
+class ArrayError(Error):
+    pass
