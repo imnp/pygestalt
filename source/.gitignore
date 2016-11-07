@@ -1,0 +1,21 @@
+# pygestalt, a control system framework for personal automation
+# .gitignore file
+# created 9/23/15
+# Ilan E. Moyer
+
+
+# annoying mac hidden files
+.DS_Store
+
+# eclipse project files
+.project
+.pydevproject
+
+# compiled python files
+*.pyc
+
+# C compiler object files
+*.o
+*.ko
+*.obj
+*.elf
