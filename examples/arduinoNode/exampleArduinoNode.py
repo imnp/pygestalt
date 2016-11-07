@@ -24,3 +24,11 @@ class virtualNode(nodes.arduinoGestaltVirtualNode):
         
         self.crystalFrequency = 16000000    #MHz
         self.ADCReferenceVoltage = 5.0  #Volts
+    
+    def initPackets(self):
+        """Initialize packet types."""
+        # As a communications framework, one of the primary tasks of Gestlat is to make it easier to pass various data types
+        # back and forth between the virtual node and the firmware running on the physical node. A rich set of data types
+        # is defined in the packets submodule.
+        
+        
