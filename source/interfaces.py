@@ -112,9 +112,11 @@ class serialInterface(baseInterface):
                              'Linux': ['ttyUSB', 'ttyACM']} # Linux
         lufaSearchStrings = {'Darwin':['tty.usbmodem'],  # Mac OSX
                 'Linux': ['ttyUSB', 'ttyACM']}  # Linux
+        wchSearchStrings = {'Darwin':['tty.wchusbserial']} #these are sometimes found on budget arduino clones
         
         searchStrings = {'ftdi': ftdiSearchStrings,
-                         'lufa': lufaSearchStrings
+                         'lufa': lufaSearchStrings,
+                         'wch': wchSearchStrings
                          }
         
         searchStrings['generic'] = self.combineSearchStrings(searchStrings)  #add a generic entry that just combines all of the existing search strings
