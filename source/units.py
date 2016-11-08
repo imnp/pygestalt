@@ -33,8 +33,10 @@ class unit(object):
         
         value -- a floating point value for the dimensional number.
         """
-        
-        return dFloat(value, {self:1})
+        if type(value) == dFloat:
+            return dFloat.convert(value, self)
+        else:
+            return dFloat(value, {self:1})
     
     def __mul__(self, value):
         """Left multiply for units.
