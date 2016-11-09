@@ -82,8 +82,8 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
     newLine -- if false, will output without a newline character
     
     Currently assigned channels:
-        _gestaltInterfaceTransmit_ -- messages from the gestalt interface transmit function
-        _gestaltNodeInboundRouter_ -- messages from the base gestalt node inbound packet router
+        comm -- messages related to communications. Mostly coming from the interfaces module.
+        units -- messages related to dimensionality of numbers
     
     Returns True if notice was printed (verbose debug is enabled), or False otherwise
     """
@@ -91,6 +91,8 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
         if padding: print ""
         if callingObject == None:
             printToTerminal(str(noticeString), newLine)
+        elif type(callingObject) == str:
+            printToTerminal("[" + callingObject + "]" + noticeString, newLine)
         else:
             printToTerminal("[" + objectIdentifier(callingObject) + "] " + str(noticeString), newLine)
         return True
