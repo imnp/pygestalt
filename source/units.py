@@ -7,7 +7,7 @@ It is inefficient and is largely intended to keep things straight and avoid unit
 defining machine kinematics or performing analysis.
 """
 
-from pygestalt import errors
+from pygestalt import errors, utilities
 import math
 import copy
 
@@ -388,10 +388,37 @@ def checkForEquivalentUnits(number1, number2):
     number1, number2 -- dFloat numbers or unitDictionaries
     
     Note that this algorithm not only checks to see if the unit dictionaries are identical, but also takes into account
-    non-dimensional units such as radians.
+    non-dimensional units such as radians. It DOES NOT reduce to base units first, so this must be done first.
     """
     
-    return True #JUST FOR NOW
+    unitDict1 = copy.copy(number1.units) #make copies of dictionaries so don't mess with them
+    unitDict2 = copy.copy(number2.units)
+    
+    for units1 in unitDict1: #iterate over all units in the first unit dictionary
+        units1Power = unitDict1[units1]
+        units2Power = unitDict2.pop(units1, False) #Retrieve unit powers. Returns False if units1 is not in unitDict2
+    
+        if units1.baseUnit == 0: #units1 is dimensionless, so continue to next iteration
+            continue
+        if units2Power == False: #units1 is inot in unitsDict2!
+            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
+            return False
+        if units1Power != units2Power:
+            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units2.abbreviation + "^"+str(units2Power))
+            return False
+        else:
+            continue #this set of units matches
+    
+    #at this point, unitDict1 has been fully iterated thru. Still need to check that all remaining units in unitDict2 are dimensionless
+    for units2 in unitDict2:
+        if units2.baseUnit == 0:
+            continue
+        else:
+            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
+            return False
+    
+    return True #if reached this point, unit dictionaries match
+    
 
 def convertToUnits(sourceNumber, targetUnits):
     """Converts a number into target units if possible.
@@ -419,6 +446,8 @@ def convertToUnits(sourceNumber, targetUnits):
     if checkForEquivalentUnits(sourceBaseNumber, targetBaseNumber):
         conversionFactor = float(targetBaseNumber)
         return dFloat(float(sourceBaseNumber)/conversionFactor, targetNumber.units)
+    else:
+        raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")
         
     
 

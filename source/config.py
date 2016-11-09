@@ -74,5 +74,5 @@ def debugChannelEnabled(debugChannel):
 
 #Global flags
 syntheticModeOff()
-verboseDebugOff()
-# setDebugChannels('comm')
+verboseDebugOn()
+setDebugChannels('units')
