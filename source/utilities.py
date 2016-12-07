@@ -92,7 +92,7 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
         if callingObject == None:
             printToTerminal(str(noticeString), newLine)
         elif type(callingObject) == str:
-            printToTerminal("[" + callingObject + "]" + noticeString, newLine)
+            printToTerminal("[" + callingObject + "] " + noticeString, newLine)
         else:
             printToTerminal("[" + objectIdentifier(callingObject) + "] " + str(noticeString), newLine)
         return True
