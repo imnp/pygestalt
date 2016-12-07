@@ -28,7 +28,7 @@ class unit(object):
         self.baseUnit = baseUnit
         self.conversion = conversion
     
-    def __call__(self, value):
+    def __call__(self, value = 1.0):
         """Generates a new dFloat with the units of this unit object.
         
         value -- a floating point value for the dimensional number.
@@ -382,13 +382,13 @@ def reduceToBaseUnits(sourceNumber):
             value = value/(conversionFactor**power)
         return dFloat(value, baseUnits)      
 
-def checkForEquivalentUnits(number1, number2):
+def unitsAreEqual(number1, number2):
     """Returns True if both provided numbers have equivalent units.
     
     number1, number2 -- dFloat numbers or unitDictionaries
     
-    Note that this algorithm not only checks to see if the unit dictionaries are identical, but also takes into account
-    non-dimensional units such as radians. It DOES NOT reduce to base units first, so this must be done first.
+    Note that this algorithm both checks to see if the unit dictionaries are identical while also taking into account
+    non-dimensional units such as radians. It DOES NOT reduce to base units first, so mm != m.
     """
     
     unitDict1 = copy.copy(number1.units) #make copies of dictionaries so don't mess with them
@@ -401,10 +401,10 @@ def checkForEquivalentUnits(number1, number2):
         if units1.baseUnit == 0: #units1 is dimensionless, so continue to next iteration
             continue
         if units2Power == False: #units1 is inot in unitsDict2!
-            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
+            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
             return False
-        if units1Power != units2Power:
-            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units2.abbreviation + "^"+str(units2Power))
+        if units1Power != units2Power: #powers are different
+            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units1.abbreviation + "^"+str(units2Power))
             return False
         else:
             continue #this set of units matches
@@ -412,12 +412,67 @@ def checkForEquivalentUnits(number1, number2):
     #at this point, unitDict1 has been fully iterated thru. Still need to check that all remaining units in unitDict2 are dimensionless
     for units2 in unitDict2:
         if units2.baseUnit == 0:
+            utilities.notice('units.unitsAreEqual', "WARNING: Non-dimensional units do not match. Assuming unit type " + units2.fullName.upper())
             continue
         else:
-            utilities.debugNotice('units.checkForEquivalentUnits', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
+            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
             return False
     
     return True #if reached this point, unit dictionaries match
+
+def unitsAreReciprocals(number1, number2):
+    """Returns True if both provided numbers have equivalent reciprocal units.
+    number1, number2 -- dFloat numbers or unitDictionaries
+    
+    Note that this algorithm both checks to see if the unit dictionaries are reciprocals while also taking into account
+    non-dimensional units such as radians. It DOES NOT reduce to base units first, so mm != m.
+    """
+
+    unitDict1 = copy.copy(number1.units) #make copies of dictionaries so don't mess with them
+    unitDict2 = copy.copy(number2.units)
+    
+    for units1 in unitDict1: #iterate over all units in the first unit dictionary
+        units1Power = unitDict1[units1]
+        units2Power = unitDict2.pop(units1, False) #Retrieve unit powers. Returns False if units1 is not in unitDict2
+    
+        if units1.baseUnit == 0: #units1 is dimensionless, so continue to next iteration
+            continue
+        if units2Power == False: #units1 is not in unitsDict2!
+            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
+            return False
+        if units1Power != -units2Power: #powers are not reciprocals
+            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units1.abbreviation + "^-"+str(units2Power))
+            return False
+        else:
+            continue #this set of units matches
+    
+    #at this point, unitDict1 has been fully iterated thru. Still need to check that all remaining units in unitDict2 are dimensionless
+    for units2 in unitDict2:
+        if units2.baseUnit == 0:
+            utilities.notice('units.unitsAreReciprocals', "WARNING: Non-dimensional units do not match. Assuming unit type " + units2.fullName.upper())
+            continue
+        else:
+            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
+            return False
+    
+    return True #if reached this point, unit dictionaries match    
+    
+    
+def hasUnits(sourceNumber, unitsToCheck, checkEquivalents = True):
+    """ Checks whether a dFloat's unit dictionary contains a particular unit type.
+    
+    sourceNumber -- the number whose units are to be checked
+    unitsToCheck -- a unit type whose presence is to be checked in the source number
+    checkEquivalents -- unless explicitly provided as False, this function will return True if an equivalent unit to unitsToCheck
+                        is found to be present in the source number.
+    """
+    if checkEquivalents: #reduce everything to base units
+        sourceUnits = {getBaseUnits(unit)[0]:sourceNumber.units[unit] for unit in sourceNumber.units} #get dictionary of base units
+        targetUnit = getBaseUnits(unitsToCheck)[0]
+    else: #only accept literally equivalent units
+        sourceUnits = sourceNumber.units
+        targetUnit = unitsToCheck
+    return (targetUnit in sourceUnits)
     
 
 def convertToUnits(sourceNumber, targetUnits):
@@ -443,9 +498,14 @@ def convertToUnits(sourceNumber, targetUnits):
     
     targetBaseNumber = reduceToBaseUnits(targetNumber) #reduce target units to base. This conveniently includes the multiplication factor
     
-    if checkForEquivalentUnits(sourceBaseNumber, targetBaseNumber):
+    if unitsAreEqual(sourceBaseNumber, targetBaseNumber): #check if units are equal
         conversionFactor = float(targetBaseNumber)
         return dFloat(float(sourceBaseNumber)/conversionFactor, targetNumber.units)
+    
+    elif unitsAreReciprocals(sourceBaseNumber, targetBaseNumber): #check if units are reciprocals
+        conversionFactor = 1.0/float(targetBaseNumber)
+        return dFloat(conversionFactor/float(sourceBaseNumber), targetNumber.units)
+    
     else:
         raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")
         
