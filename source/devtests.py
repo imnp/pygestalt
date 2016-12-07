@@ -8,6 +8,7 @@ from pygestalt import config
 from pygestalt import interfaces
 from pygestalt import units
 from pygestalt import geometry
+from pygestalt import mechanics
 import copy
 import time
 
@@ -184,12 +185,14 @@ import time
 # print mySpeed.convert(units.m/units.min**2)
 
 # ---MECHANICS---
-myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
 # myArray[1]
-print myArray[:,0]
+# print type(myArray[0,:])
 
+# print units.mm/units.rev
 
-
+myLeadscrew = mechanics.leadscrew(2/units.rad)
+print myLeadscrew.forwardTransform
 
 
 # time.sleep(2)
