@@ -383,7 +383,7 @@ def reduceToBaseUnits(sourceNumber):
         return dFloat(value, baseUnits)      
 
 def unitsAreEqual(number1, number2):
-    """Returns True if both provided numbers have equivalent units.
+    """Returns True if both provided numbers have equal units.
     
     number1, number2 -- dFloat numbers or unitDictionaries
     
@@ -422,6 +422,7 @@ def unitsAreEqual(number1, number2):
 
 def unitsAreReciprocals(number1, number2):
     """Returns True if both provided numbers have equivalent reciprocal units.
+    
     number1, number2 -- dFloat numbers or unitDictionaries
     
     Note that this algorithm both checks to see if the unit dictionaries are reciprocals while also taking into account
@@ -456,6 +457,22 @@ def unitsAreReciprocals(number1, number2):
             return False
     
     return True #if reached this point, unit dictionaries match    
+
+def getUnitEquivalency(number1, number2):
+    """Returns the equivalency of the units of two input numbers.
+
+    number1, number2 -- dFloat numbers or unitDictionaries
+    
+    Equivalency is defined as numbers whose BASE units are either equal or reciprocals.
+    
+    Returns the power of the equivalency (1 or -1), or 0 if the units are not equivalent
+    """       
+    if unitsAreEqual(reduceToBaseUnits(number1), reduceToBaseUnits(number2)):
+        return 1
+    elif unitsAreReciprocals(reduceToBaseUnits(number1), reduceToBaseUnits(number2)):
+        return -1
+    else:
+        return 0
     
     
 def hasUnits(sourceNumber, unitsToCheck, checkEquivalents = True):
@@ -475,11 +492,12 @@ def hasUnits(sourceNumber, unitsToCheck, checkEquivalents = True):
     return (targetUnit in sourceUnits)
     
 
-def convertToUnits(sourceNumber, targetUnits):
+def convertToUnits(sourceNumber, targetUnits, strict = False):
     """Converts a number into target units if possible.
     
     sourceNumber -- a dFloat number to be converted
     targetUnits -- either a dFloat, unitDictionary, or unit
+    strict -- if False, will allow conversion between reciprocal numbers.
     
     returns a dFloat in the target units, or raises an exception if units mis-match.
     """
@@ -498,17 +516,15 @@ def convertToUnits(sourceNumber, targetUnits):
     
     targetBaseNumber = reduceToBaseUnits(targetNumber) #reduce target units to base. This conveniently includes the multiplication factor
     
-    if unitsAreEqual(sourceBaseNumber, targetBaseNumber): #check if units are equal
-        conversionFactor = float(targetBaseNumber)
-        return dFloat(float(sourceBaseNumber)/conversionFactor, targetNumber.units)
+    unitEquivalency = getUnitEquivalency(sourceBaseNumber, targetBaseNumber) #1 if equivalent, -1 if reciprocals, or 0 if not equivalent
     
-    elif unitsAreReciprocals(sourceBaseNumber, targetBaseNumber): #check if units are reciprocals
-        conversionFactor = 1.0/float(targetBaseNumber)
-        return dFloat(conversionFactor/float(sourceBaseNumber), targetNumber.units)
+    conversionFactor = float(targetBaseNumber)**unitEquivalency
+    convertedNumber = dFloat((float(sourceBaseNumber)/conversionFactor)**unitEquivalency, targetNumber.units)
     
+    if (unitEquivalency == 1) or (not strict and unitEquivalency == -1):
+        return convertedNumber
     else:
-        raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")
-        
+        raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")        
     
 
     

@@ -4,7 +4,7 @@
 
 #---- INCLUDES ----
 import math
-from pygestalt import errors, units
+from pygestalt import errors, units, utilities
 
 class transformer(object):
     """Base class for all types that transform from one state to another.
@@ -31,19 +31,43 @@ class transformer(object):
                             that transforms from one domain into another in the forward (i.e. actuator -> end effector) direction.
         
         reverseTransform -- if provided, is used to perform the transformation in the reverse direction. Note that this mandatory
-                            if anything other than a dFloat is provided as the forward transform.
+                            if anything other than an invertable object such as a dFloat is provided as the forward transform.
         
         inertia -- the inertia of the transformer element used for dynamic simulation
         """
         self.forwardTransform = forwardTransform
-        self.reverseTransform = reverseTransform
+        if reverseTransform: #a reverse transform was provided, so use that.
+            self.reverseTransform = reverseTransform
+        else: #no reverse transform provided. Try to invert the forward transform.
+            try:
+                self.reverseTransform = forwardTransform**-1
+            except:
+                raise errors.MechanismError("No reverse transform provided. Forward transform [" + str(forwardTransform) + "] is not invertable!")
         self.inertia = inertia
     
-    def forward(self):
-        pass
+    def forward(self, inputState):
+        """Transforms state in the forward direction.
+        
+        inputState -- the input-side state of the transformer.
+        
+        Note that this function simply multiplies the forward transform by the input state. Any complexity must be handled
+        by the __mul__ function of the transform.
+        """
+        outputState = self.forwardTransform * inputState
+        return outputState
     
-    def reverse(self):
-        pass
+    def reverse(self, outputState):
+        """Transforms state in the reverse direction.
+        
+        outputState -- the input-side state of the transformer.
+        
+        Returns the corresponding input-side state.
+
+        Note that this function simply multiplies the reverse transform by the output state. Any complexity must be handled
+        by the __mul__ function of the transform.
+        """
+        inputState = self.reverseTransform * outputState
+        return inputState
 
 
 class singleAxisElement(transformer):
@@ -78,6 +102,60 @@ class singleAxisElement(transformer):
         super(singleAxisElement, self).__init__(forwardTransform = transform, reverseTransform = None, inertia = inertia)
 
 
+    def forward(self, forwardState):
+        """Tranforms from an input state of the tranformer to the corresponding output state.
+        
+        forwardState -- the forward-going input state of the transformer. MUST be provided as a units.dFloat type.
+        
+        Note that this function over-rides its base class transformer.forward() function.
+        """
+        
+        if type(forwardState) == units.dFloat:
+            convertedForwardState = units.convertToUnits(forwardState, self.inputUnits, strict = True) #convert to input units, don't allow reciprocals
+            return self.forwardTransform*convertedForwardState
+        else:
+            utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
+            raise errors.MechanismError("Incorrect input type to singleAxisElement.forward()")
+    
+    def reverse(self, reverseState):
+        """Tranforms in the reverse direction from an output state of the tranformer to the corresponding input state.
+        
+        inputState -- the input state of the transformer. MUST be provided as a units.dFloat type.
+        
+        Note that this function over-rides its base class transformer.forward() function.
+        """
+        
+        if type(reverseState) == units.dFloat:
+            convertedReverseState = units.convertToUnits(reverseState, self.outputUnits, strict = True) #convert to input units, don't allow reciprocals
+            return self.reverseTransform*convertedReverseState
+        else:
+            utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
+            raise errors.MechanismError("Incorrect input type to singleAxisElement.reverse()")
+
+    def transform(self, inputState):
+        """Transforms from one state to another based on the provided input units.
+          
+        This is something of a bonus function, as the recommended useage is to explicitly call forward() or reverse().
+        """
+          
+        if type(inputState) == units.dFloat:
+            
+            forwardUnitEquivalency = units.getUnitEquivalency(inputState, self.inputUnits(1)) #1 if equivalent, -1 if reciprocals, 0 if not equivalent
+            reverseUnitEquivalency = units.getUnitEquivalency(inputState, self.outputUnits(1))
+            
+            if forwardUnitEquivalency == 1: #inputState units match transform input units. Transform in the forward direction.
+                convertedInputState = units.convertToUnits(inputState, self.inputUnits, strict = True) #convert to input units, don't allow reciprocals
+                return self.forwardTransform*convertedInputState
+            elif reverseUnitEquivalency == 1: #inputState units match transform output units. Transform in the reverse direction.
+                convertedInputState = units.convertToUnits(inputState, self.outputUnits, strict = True) #convert to input units, don't allow reciprocals
+                return self.reverseTransform*convertedInputState
+            else:
+                utilities.notice(self, "Input to singleAxisElement transformer cannot be transformed because of a dimensionality mismatch.")
+                raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")
+        else:
+            utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
+            raise errors.MechanismError("Incorrect input type to singleAxisElement.transform()")
+        
 
 #---- ELEMENT TYPES ----
 
@@ -93,6 +171,35 @@ class leadscrew(singleAxisElement):
         
         super(leadscrew, self).__init__(transform = lead, inputUnits = units.rev, outputUnits = units.mm)
 
+
+class gear(singleAxisElement):
+    """A mechanical element that transforms torque and angular velocity by means of meshing teeth."""
+    
+    def __init__(self, reductionRatio):
+        """Initializes a new gear set.
+        
+        reductionRatio -- the ratio between revolutions of the input gear to revolutions of the output gear.
+                    this can be calculated by dividing the output pitch diameter by the input pitch diameter,
+                        or the output number of teeth by the input number of teeth.
+                    
+                inputUnits and outputUnits are both in revolutions
+        """
+        
+        super(gear, self).__init__(transform = 1.0/reductionRatio, inputUnits = units.rev, outputUnits = units.rev)
+
+
+class rotaryPulley(singleAxisElement):
+    """A mechanical element that transforms torque and angular velocity by means of a belt connecting two pulleys."""
+
+    def __init__(self, reductionRatio):
+        """Initializes a new rotary pulley set.
+        
+        reductionRatio --   the ratio between revolutions of the input pulley to revolutions of the output pulley.
+                            this can be calculated by dividing the diamter of the output pulley by the diameter of the input pulley.
+                inputUnits and outputUnits are both in revolutions
+        """
+        
+        super(rotaryPulley, self).__init__(transform = 1.0/reductionRatio, inputUnits = units.rev, outputUnits = units.rev)  
 
 # class matrix(object):
 #     """A base class for creating transformation matrices."""

@@ -191,8 +191,18 @@ import time
 
 # print units.mm/units.rev
 
-myLeadscrew = mechanics.leadscrew(2/units.rad)
-print myLeadscrew.forwardTransform
+myLeadscrew = mechanics.leadscrew(units.rev(10)/units.inch(1))
+# print myLeadscrew.forwardTransform
+# print myLeadscrew.forward(360*units.deg)
+# print myLeadscrew.reverse(0.25*units.inch)
+# print myLeadscrew.transform(360*units.deg)
+# print myLeadscrew.transform(units.mm(2.54))
+
+myGearbox = mechanics.gear(5)
+# print myGearbox.forward(units.rad(6.28*5))
+# print myGearbox.reverse(units.deg(72))
+
+
 
 
 # time.sleep(2)

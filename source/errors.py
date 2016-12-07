@@ -11,6 +11,9 @@ class CompositionError(Error):
 class UnitError(Error):
     pass
 
+class MechanismError(Error):
+    pass
+
 class UnitConversionError(Error):
     pass
 
