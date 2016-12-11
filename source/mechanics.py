@@ -157,7 +157,7 @@ class singleAxisElement(transformer):
             raise errors.MechanismError("Incorrect input type to singleAxisElement.transform()")
         
 
-#---- ELEMENT TYPES ----
+#---- SINGLE AXIS ELEMENT TYPES ----
 
 class leadscrew(singleAxisElement):
     """A mechanical element that transforms rotation into translation by means of a helical screw."""
@@ -200,6 +200,81 @@ class rotaryPulley(singleAxisElement):
         """
         
         super(rotaryPulley, self).__init__(transform = 1.0/reductionRatio, inputUnits = units.rev, outputUnits = units.rev)  
+
+
+class timingBelt(singleAxisElement):
+    """A mechanical element that transforms rotation into translation by means of a toothed pulley meshed with a timing belt."""
+
+    def __init__(self, pulleyPitchDiameter):
+        """Initializes a new timing belt.
+        
+        pulleyPitchDiameter -- the pitch diameter of the timing pulley, in mm.
+        """
+        
+        pitchCircumference = math.pi*pulleyPitchDiameter #transformation ratio is the circumference when going from rev -> travel distance
+        super(timingBelt, self).__init__(transform = pitchCircumference, inputUnits = units.rev, outputUnits = units.mm)
+
+class rack(singleAxisElement):
+    """A mechanical element that transforms rotation into translation by means of a gear pinion meshed with a flat gear rack."""
+    
+    def __init__(self, pinionPitchDiameter):
+        """Initializes a new rack and pinion.
+        
+        pinionPitchDiameter -- the pitch diameter of the pinion, in mm.
+        """
+        
+        pitchCircumference = math.pi*pinionPitchDiameter #transformation is circumference when going from rev -> travel distance
+        super(rack, self).__init__(transform = pitchCircumference, inputUnits = units.rev, outputUnits = units.mm)
+
+class stepper(singleAxisElement):
+    """An electromechanical element that transforms electrical 'step' pulses into rotation."""
+    
+    def __init__(self, stepSize):
+        """Initializes a new stepper motor.
+        
+        stepSize -- the rotational angle moved by the motor each step, in degrees.
+        """
+        
+        super(stepper, self).__init__(transform = stepSize, inputUnits = units.step, outputUnits = units.deg)
+        
+
+#--- ELEMENT CHAINS ---
+class chain(transformer):
+    """A serial chain of transformer elements."""
+    
+    def __init__(self, *transformers):
+        """Initializes a new transformer chain.
+        
+        *transformers -- a series of transformer elements, provided as positional arguments in the forward direction.
+        """
+        self.transformChain = transformers
+
+    def forward(self, forwardState):
+        """Tranforms from an input state of the tranformer chain to the corresponding output state.
+        
+        forwardState -- the forward-going input state of the transformer chain.
+        
+        Transformation is accomplished by successively feeding the output of each element into the input of the subsequent element.
+        
+        Note that this function over-rides its base class transformer.forward() function.
+        """
+        for transformerElement in self.transformChain:
+            forwardState = transformerElement.forward(forwardState)
+        return forwardState
+    
+    def reverse(self, outputState):
+        """Tranforms from an output state of the tranformer chain to the corresponding input state.
+        
+        outputState -- the reverse-going output state of the transformer chain.
+        
+        Transformation is accomplished by successively feeding the input of each element into the output of the subsequent element.
+        
+        Note that this function over-rides its base class transformer.reverse() function.
+        """
+        for transformerElement in reversed(self.transformChain):
+            outputState = transformerElement.reverse(outputState)
+        return outputState
+
 
 # class matrix(object):
 #     """A base class for creating transformation matrices."""

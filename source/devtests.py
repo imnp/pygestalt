@@ -202,7 +202,18 @@ myGearbox = mechanics.gear(5)
 # print myGearbox.forward(units.rad(6.28*5))
 # print myGearbox.reverse(units.deg(72))
 
+myTimingBelt = mechanics.timingBelt(18)
+# print myTimingBelt.forward(units.rev(1))
 
+# myStepperMotor = mechanics.stepperMotor(units.step(400)/units.rev(1))
+# print myStepperMotor.forward(units.step(200))
 
+myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
+myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
+myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+
+xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+
+print xAxisChain.reverse(units.mm(10))
 
 # time.sleep(2)
