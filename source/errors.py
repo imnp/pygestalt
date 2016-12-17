@@ -19,3 +19,6 @@ class UnitConversionError(Error):
 
 class ArrayError(Error):
     pass
+
+class MatrixError(Error):
+    pass

@@ -276,6 +276,7 @@ class chain(transformer):
         return outputState
 
 
+
 # class matrix(object):
 #     """A base class for creating transformation matrices."""
 #     def __init__(self, array):

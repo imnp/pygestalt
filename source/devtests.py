@@ -185,8 +185,8 @@ import time
 # print mySpeed.convert(units.m/units.min**2)
 
 # ---MECHANICS---
-# myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
-# myArray[1]
+myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# print myArray[0,1]
 # print type(myArray[0,:])
 
 # print units.mm/units.rev
@@ -208,12 +208,27 @@ myTimingBelt = mechanics.timingBelt(18)
 # myStepperMotor = mechanics.stepperMotor(units.step(400)/units.rev(1))
 # print myStepperMotor.forward(units.step(200))
 
-myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
-myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
-myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+# myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
+# myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
+# myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+# 
+# xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+# 
+# print xAxisChain.reverse(units.mm(10))
 
-xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+# matrix1 = geometry.matrix([[2,-2],[5,3]])
+# matrix2 = geometry.matrix([[-1,4],[7,-6]])
+# print matrix1
+# print matrix1.transpose()
+# print matrix1*matrix2
+# print geometry.dotProduct(matrix1, matrix2)
 
-print xAxisChain.reverse(units.mm(10))
+myList = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+print myList
+# print isinstance(myList, list)
+print "size: " + str(myList.getSize())
+print "dimension: " + str(myList.getDimension())
+print myList[:,:]
+# print myList[1,1]
 
 # time.sleep(2)
