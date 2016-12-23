@@ -234,7 +234,7 @@ class dFloat(float):
         of this dFloat will be passed along into the result.
         """
         value = float(self) + float(other) #perform numerical addition
-        units = unitDict(self.units) #make a copy of unit dictionary
+        units = unitDictionary(self.units) #make a copy of unit dictionary
         if type(other) == dFloat:
             if self.units != other.units: #check to make sure units match
                 raise errors.UnitError("addition operand units don't match")
@@ -248,7 +248,7 @@ class dFloat(float):
         The units of this dFloat will be passed along into the result.
         """
         value = float(self) + float(other)
-        units = unitDict(self.units)
+        units = unitDictionary(self.units)
         return dFloat(value, units)
     
     def __sub__(self, other):
@@ -260,7 +260,7 @@ class dFloat(float):
         of this dFloat will be passed along into the result.
         """
         value = float(self) - float(other) #perform numerical addition
-        units = unitDict(self.units) #make a copy of unit dictionary
+        units = unitDictionary(self.units) #make a copy of unit dictionary
         if type(other) == dFloat:
             if self.units != other.units: #check to make sure units match
                 raise errors.UnitError("addition operand units don't match")
@@ -274,7 +274,7 @@ class dFloat(float):
         The units of this dFloat will be passed along into the result.
         """
         value = float(other) - float(self)
-        units = unitDict(self.units)
+        units = unitDictionary(self.units)
         return dFloat(value, units)
     
     def __mul__(self, other):
