@@ -48,18 +48,32 @@ class array(list):
     def __str__(self):
         return "(pyGestalt " + type(self).__name__.capitalize() + ") "+ str(list(self)) 
         
-    def __getitem__(self, positionTuple, subArray = None):
+    def __getitem__(self, positionTuple):
         """Returns an individual item or a slice in the array.
         
         positionTuple -- this is provided by the Python interpreter when the array is indexed
-        subArray -- this is only used internally for the recursive algorithm
         
+        This method over-rides the built-in __getitem__ method of the list type.
         To index into a specific cell of an array, simply index as myArray[1,2] to retrieve item in row 1, column 2.
         To index an entire subarray, index as myArray[1,:] to retrieve all of row 1.
         If the number of indices in positionTuple is less than the dimensionality of the array,
             and if no slices are used, then indexing starts at the first dimension whose size is greater than 1.
             This is to support compatibility between various formats of arrays, i.e. a 1D array and a 2D 1xN array.
         """
+        return self._getItem_(positionTuple)
+    
+    
+    def _getItem_(self, positionTuple, subArray = None):
+        """Internal recursive method for indexing into a multi-dimensional array.
+        
+        positionTuple -- this is provided by the Python interpreter when the array is indexed
+        subArray -- this is only used internally for the recursive algorithm
+        
+        Note that the intended pattern is that this method gets called by __getitem__. It is broken out
+        because __getitem__ might be overridden by child classes such as geometry.matrix to enforce
+        a particular dimensionality of the result.
+        """
+        
         if type(positionTuple) != tuple: positionTuple = (positionTuple,) #catches condition when only one index is provided
         
         if subArray == None: #starting the algorithm
@@ -88,7 +102,7 @@ class array(list):
             if positionRemainder == (): #user didn't ask for more than the slice... good!
                 return type(self)(subArray)
             else:
-                slicedArrayList = [self.__getitem__(positionRemainder, arraySlice) for arraySlice in subArray]
+                slicedArrayList = [[self._getItem_(positionRemainder, arraySlice)] for arraySlice in subArray]
                 return type(self)(slicedArrayList)
         else: #asking for an indexed value:
             try:
@@ -102,7 +116,7 @@ class array(list):
                     raise errors.ArrayError("Index Error - array is larger than number of indices provided")
                     return False
                 else:
-                    return self.__getitem__(positionRemainder, indexedValue)
+                    return self._getItem_(positionRemainder, indexedValue)
             else: #end of array
                 if positionRemainder == (): #no extra indices requested, good!
                     return indexedValue #finally return the value
@@ -114,66 +128,63 @@ class array(list):
 
 class matrix(array):
     """A matrix object that extends the array type with mathematical operations.
-    
+     
     While matrix is a subclass of array, note that matrices MUST have a dimensionality of 2.
     """
-
+          
     def __init__(self, arrayList):
-        """Initialization function for the matrix object.
-        
+        """Instantiation function for the matrix object.
+         
         arrayList -- a list of the format [[a1, a2, ..., aN], [b1, b2, ..., bN], ..., [z1, z2, ..., zN]].
                      MUST be of dimensionality 2. If a 1-D array is provided (i.e. a list), it will be wrapped.
-        
+         
         Note that contents of the array cannot be a list, or else they will be confused with a dimension of the array.
         """
-        
-        if type(arrayList) != list: #check for correct input
+         
+        if not isinstance(arrayList, list): #check for correct input
             raise errors.MatrixError("Matrix must be created with a list-formatted array. E.g. [[a1,a2],[b1,b2]]")
             return False
-        
-        inputDimension = self.getListDimensionality(arrayList) #determine the dimensionality of the input list
-        
+
+        super(matrix, self).__init__(arrayList)
+                          
+        inputDimension = self.getDimension() #determine the dimensionality of the input list
+          
         if inputDimension > 2: #dimensionality is too big for a matrix.
             raise errors.MatrixError("Matrix must have dimensionality <=2. Input has dimensionality of "+ str(inputDimension))
             return False
         if inputDimension == 1:
             arrayList = [arrayList] #wrap array to get dimensionality of 2
-        super(matrix, self).__init__(arrayList)
-            
+            super(matrix, self).__init__(arrayList) #call __init__ again to perform the wrap
+ 
+
+             
     def transpose(self):
         """Returns the transpose of the matrix."""
-        rows = self.size[0]
-        columns = self.size[1]
+        rows, columns = self.getSize()
         return matrix([[self[row, column] for row in range(rows)] for column in range(columns)])
-    
+     
     def __mul__(self, otherMatrix):
         """Matrix multiply.
-        
+         
         otherMatrix -- a matrix by which to multiply.
         """
-        leftSize = self.size
-        rightSize = otherMatrix.size
-        
-        leftRows = leftSize[0]
-        leftColumns = leftSize[1]
-        rightRows = rightSize[0]
-        rightColumns = rightSize[1]
-        
+         
+        leftRows, leftColumns = self.getSize()
+        rightRows, rightColumns = otherMatrix.getSize()
+         
         if leftColumns == rightRows: #arrays can be multiplied
-            return matrix([[dotProduct(self[leftRow,:], otherMatrix[:,rightColumn].transpose()) for rightColumn in range(rightColumns)] for leftRow in range(leftRows)])
-
-    def __str__(self):
-        return "(pyGestalt Matrix) "+ str(self.arrayList)            
+            return matrix([[dotProduct(self[leftRow,:], otherMatrix[:,rightColumn].transpose()) for rightColumn in range(rightColumns)] for leftRow in range(leftRows)])       
     
 def dotProduct(array1, array2):
-    """Returns the dot product of two arrays.
+    """Returns the dot product of two matrices.
     
-    array1, array2 -- the input arrays. For now, these are expected to be matching 1D arrays.
+    array1, array2 -- the input arrays. For now, these are expected to be matching 1D or 2D 1xN arrays.
     
     Returns array1 *dot* array2
     """
     
     runningDotProduct = 0
-    for index in range(array1.size[0]):
+    for index in range(array1.getSize()[-1]): #takes the last index as the anticipation is that the array is either 1D or 1xN
         runningDotProduct += array1[index]*array2[index]
+    return runningDotProduct
     return runningDotProduct

@@ -226,9 +226,17 @@ myTimingBelt = mechanics.timingBelt(18)
 myList = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
 print myList
 # print isinstance(myList, list)
-print "size: " + str(myList.getSize())
-print "dimension: " + str(myList.getDimension())
-print myList[:,:]
+# print "size: " + str(myList.getSize())
+# print "dimension: " + str(myList.getDimension())
+print myList[:,0]
+
+myMatrix = geometry.matrix([1,2,3])
+matrix1 = geometry.matrix([[2,-2],[5,3]])
+matrix2 = geometry.matrix([[units.mm(1)],[units.mm(1)]])
+
+matrix3 = matrix1*matrix2
+
+print matrix3[0,0]
 # print myList[1,1]
 
 # time.sleep(2)
