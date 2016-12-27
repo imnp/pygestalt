@@ -208,14 +208,15 @@ myTimingBelt = mechanics.timingBelt(18)
 # myStepperMotor = mechanics.stepperMotor(units.step(400)/units.rev(1))
 # print myStepperMotor.forward(units.step(200))
 
-# myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
-# myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
-# myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
+myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
+myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+ 
+xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
 # 
-# xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+print xAxisChain.reverse(units.mm(10))
+print xAxisChain.forward(units.step(200))
 # 
-# print xAxisChain.reverse(units.mm(10))
-
 # matrix1 = geometry.matrix([[2,-2],[5,3]])
 # matrix2 = geometry.matrix([[-1,4],[7,-6]])
 # print matrix1
@@ -223,20 +224,76 @@ myTimingBelt = mechanics.timingBelt(18)
 # print matrix1*matrix2
 # print geometry.dotProduct(matrix1, matrix2)
 
-myList = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
-print myList
+# exit()
+# myList = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# myList2 = myList[:,0]
 # print isinstance(myList, list)
 # print "size: " + str(myList.getSize())
 # print "dimension: " + str(myList.getDimension())
-print myList[:,0]
 
-myMatrix = geometry.matrix([1,2,3])
-matrix1 = geometry.matrix([[2,-2],[5,3]])
-matrix2 = geometry.matrix([[units.mm(1)],[units.mm(1)]])
+# myMatrix = geometry.matrix([1,2,3])
+# matrix1 = geometry.matrix([[2,-2],[5,3]])
+# matrix4 = geometry.matrix([[units.mm(1)],[units.mm(1)]])
 
-matrix3 = matrix1*matrix2
+# 
+# print myMatrix[0]
+# 
+# # 
+# print matrix1
+# print matrix1.getSize()
+# # 
+# # 
+# newMatrix =  matrix1[0,:]
+# print newMatrix
+# 
+# exit()
+# 
+# print newMatrix[0]
 
-print matrix3[0,0]
+# matrix3 = matrix1*matrix4
+# matrix3 = matrix3 * 10
+# print matrix3[1,0]
+
+# matrix4 = geometry.matrix([[3,8],[4,6]])
+# x = geometry.testClass()
+# x[1:,2:]
+# print matrix4.determinant()
 # print myList[1,1]
 
 # time.sleep(2)
+
+# myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# print myArray.getSize()
+# print myArray.getDimension()
+# print geometry.indexIntoArray(myArray, (2,2))
+# print myArray[0]
+# 
+# myArray2 = geometry.array([[1,2,3]])
+# print myArray2
+# print myArray2[1:]
+
+# matrix1 = geometry.matrix([[2,-2],[5,3]])
+# matrix2 = geometry.matrix([[-1,4],[7,-6]])
+# print matrix1
+# print matrix1.transpose()
+# print matrix1*matrix2
+# print matrix1.concatenateRight(matrix2)
+# print matrix1.concatenateLeft(matrix2)
+
+# matrix5 = geometry.matrix([[units.mm(1),units.mm(2)],[units.mm(3),units.mm(4)]])
+
+# print geometry.arrayMultiplyByScalar(matrix5, 2)
+# print matrix5[:,:0]
+
+# matrix6 = geometry.matrix(geometry.matrixInverse(matrix5))
+# print matrix6
+# print matrix6[0,0]
+
+# matrix7 = geometry.matrix([[units.mm(4),units.mm(2),units.mm(8)],[units.mm(7),units.mm(3),units.mm(9)],[units.mm(2),units.mm(6),units.mm(7)]])
+# print matrix7.inverse()[0,0]
+
+
+# print geometry.dotProduct(matrix1, matrix2)
+# matrix8 = geometry.matrix([[1,2,3],[4,5,6],[7,8,9]])
+# matrix9 = matrix8 * units.mm(1.0)
+# print matrix9[0,0]
