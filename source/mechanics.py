@@ -27,7 +27,7 @@ class transformer(object):
     def __init__(self, forwardTransform, reverseTransform = None, inertia = 0.0):
         """Initializer for the transformer.
         
-        forwardTransform -- a dimensional float (units.dFloat), transformation matrix (geometry.array), or a callable object,
+        forwardTransform -- a dimensional float (units.dFloat), transformation matrix (geometry.matrix), or a callable object,
                             that transforms from one domain into another in the forward (i.e. actuator -> end effector) direction.
         
         reverseTransform -- if provided, is used to perform the transformation in the reverse direction. Note that this mandatory
@@ -35,6 +35,7 @@ class transformer(object):
         
         inertia -- the inertia of the transformer element used for dynamic simulation
         """
+        
         self.forwardTransform = forwardTransform
         if reverseTransform: #a reverse transform was provided, so use that.
             self.reverseTransform = reverseTransform
@@ -44,6 +45,8 @@ class transformer(object):
             except:
                 raise errors.MechanismError("No reverse transform provided. Forward transform [" + str(forwardTransform) + "] is not invertable!")
         self.inertia = inertia
+        
+        self.dimensions = self.calculateDimensions()
     
     def forward(self, inputState):
         """Transforms state in the forward direction.
@@ -69,7 +72,42 @@ class transformer(object):
         inputState = self.reverseTransform * outputState
         return inputState
 
-
+    def calculateDimensions(self):
+        """Determines and returns the input and output dimensions of the transformer.
+        
+        The dimensionality of the transformer is defined as the number of degrees of freedom it accepts as inputs and that it
+        provides as outputs.
+        
+        returns dimensions as a tuple in the format (outputDimension, inputDimension), where:
+            outputDimension -- the number of degrees of freedom of the transformer output
+            inputDimension -- the number of degrees of freedom of the transformer input
+            
+        Note that the order is (output, input) to maintain compatibility with matrix sizes and indices as (rows, columns), where
+        the number of columns corresponds to the inputs of the transformation matrix, and the number of rows the outputs.
+        """
+        if isinstance(self.forwardTransform, float):
+            outputDimension, inputDimension = (1,1) #transform is a (dimensional) floating point number, so input and output dimensions are 1
+        else:
+            try: #see if forwardTransform implements getSize()
+                outputDimension, inputDimension = self.forwardTransform.getSize()
+            except AttributeError: #no getSize is implemented
+                outputDimension, inputDimension = (None, None) #return (None, None) as a placeholder since no size can be determined.
+        
+        return (outputDimension, inputDimension)
+    
+    def getSize(self):
+        """Returns the pre-calculated input and output dimensions of the transformer.
+        
+        returns dimensions as a tuple in the format (outputDimension, inputDimension), where:
+            outputDimension -- the number of degrees of freedom of the transformer output
+            inputDimension -- the number of degrees of freedom of the transformer input
+        
+        Note that this method is called getSize rather than getDimensions to keep it consistent with the geometry.array method. It is still
+        slightly confusing because the size of an array might be e.g. 3x3 but its dimensionality is 2. But we think of the dimensionality of a
+        transformer as 1D, 2D, 3D, etc...
+        """
+        return self.dimensions
+                
 class singleAxisElement(transformer):
     """A one-dimensional machine element that transforms state from one domain to another."""
     
@@ -238,7 +276,7 @@ class stepper(singleAxisElement):
         super(stepper, self).__init__(transform = stepSize, inputUnits = units.step, outputUnits = units.deg)
         
 
-#--- ELEMENT CHAINS ---
+#--- TRANSFORMER CONTAINERS ---
 class chain(transformer):
     """A serial chain of transformer elements."""
     
@@ -248,6 +286,7 @@ class chain(transformer):
         *transformers -- a series of transformer elements, provided as positional arguments in the forward direction.
         """
         self.transformChain = transformers
+        self.dimensions = self.calculateDimensions()
 
     def forward(self, forwardState):
         """Tranforms from an input state of the tranformer chain to the corresponding output state.
@@ -274,17 +313,151 @@ class chain(transformer):
         for transformerElement in reversed(self.transformChain):
             outputState = transformerElement.reverse(outputState)
         return outputState
+    
+    def calculateDimensions(self):
+        """Determines and returns the input and output dimensions of the transformer chain.
+        
+        The dimensionality of the transformer is defined as the number of degrees of freedom it accepts as inputs and that it
+        provides as outputs. Note that this method overrides transformer.calculateDimensions.
+        
+        returns dimensions as a tuple in the format (outputDimension, inputDimension), where:
+            outputDimension -- the number of degrees of freedom of the transformer output
+            inputDimension -- the number of degrees of freedom of the transformer input
+        """
+        outputDimension = self.transformChain[-1].getSize()[0]
+        inputDimension = self.transformChain[0].getSize()[1]
+        return (outputDimension, inputDimension)
 
 
+class stack(transformer):
+    """A parallel stack of transformers."""
+    
+    def __init__(self, *transformers):
+        """Initializes a new transformer stack.
+        
+        *transformers -- a parallel set of stacked transformers, provided in sequence from the 0th to Nth dimension.
+        """
+        self.transformerStack = transformers
+        self.dimensions = self.calculateDimensions()
 
-# class matrix(object):
-#     """A base class for creating transformation matrices."""
-#     def __init__(self, array):
-#         self.array = array
-# 
-#     def forward(self, input):
-#         if self.array[1][1]
-#     
-# class transformer(object):
-#     def __init__(self):
-#         self.transformMatrix = matrix([[1,2],[3,4]])
+
+    def forward(self, forwardState):
+        """Tranforms from an input state of the tranformer stack to the corresponding output state.
+        
+        forwardState -- the forward-going input state of the transformer stack.
+        
+        Transformation is accomplished by expanding the input state into chunks sized for each transformer in the stack.
+        
+        Note that this function over-rides its base class transformer.forward() function.
+        """
+        
+        if not isinstance(forwardState, list): #if the forwardState is not provided as a list-formatted array, wrap it.
+            forwardState = [forwardState]
+        
+        outputState = [] #initialize output state as an empty list
+        for transformerElement in self.transformerStack:
+            inputDimension = transformerElement.getSize()[1]
+            if len(forwardState)>= inputDimension: #make sure there's enough input dimensions remaining
+                
+                if inputDimension == 1: #single-axis, so feed with dFloat rather than list.
+                    forwardSubState = forwardState[0] #feed first value of forwardState
+                    forwardState = forwardState[1:] #forwardState gets first value stripped
+                    outputSubState = transformerElement.forward(forwardSubState) #perform transform to get output segment state
+                else: #multi-axis, feed with a list
+                    forwardSubState = forwardState[0:inputDimension]
+                    forwardState = forwardState[inputDimension:]
+                    outputSubState = transformerElement.forward(forwardSubState)
+                
+                if not isinstance(outputSubState, list): #output state is not a list, so wrap
+                    outputState += [outputSubState]
+                else:
+                    outputState += outputSubState 
+
+            else:
+                utilities.notice(self, "Cannot perform transform because dimension of forward state is less than input dimension of transformer.")
+                raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")                
+        
+        if len(forwardState) == 0: 
+            if len(outputState) == 1: 
+                return outputState[0] #single element, so strip away list
+            else: 
+                return outputState 
+        else: #uh oh! some input is left over
+            utilities.notice(self, "Cannot perform transform because dimension of forward state is greater than input dimension of transformer.")
+            raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")               
+
+
+    def reverse(self, outputState):
+        """Tranforms from an output state of the tranformer chain to the corresponding input state.
+        
+        outputState -- the reverse-going output state of the transformer stack.
+        
+        Transformation is accomplished by expanding the output state into chunks sized for each transformer in the stack.
+        
+        Note that this function over-rides its base class transformer.reverse() function.
+        """
+        if not isinstance(outputState, list): #if the forwardState is not provided as a list-formatted array, wrap it.
+            outputState = [outputState]
+        
+        inputState = [] #initialize input state as an empty list
+        for transformerElement in self.transformerStack:
+            outputDimension = transformerElement.getSize()[0]
+            if len(outputState)>= outputDimension: #make sure there's enough input dimensions remaining
+                
+                if outputDimension == 1: #single-axis, so feed with dFloat rather than list.
+                    outputSubState = outputState[0] #feed first value of outputState
+                    outputState = outputState[1:] #outputState gets first value stripped
+                    inputSubState = transformerElement.reverse(outputSubState) #perform transform to get input segment state
+                else: #multi-axis, feed with a list
+                    outputSubState = outputState[0:outputDimension]
+                    outputState = outputState[outputDimension:]
+                    inputSubState = transformerElement.reverse(outputSubState)
+                
+                if not isinstance(inputSubState, list): #input state is not a list, so wrap
+                    inputState += [inputSubState]
+                else:
+                    inputState += inputSubState 
+
+            else:
+                utilities.notice(self, "Cannot perform transform because dimension of forward state is less than input dimension of transformer.")
+                raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")                
+        
+        if len(outputState) == 0: 
+            if len(inputState) == 1: 
+                return inputState[0] #single element, so strip away list
+            else: 
+                return inputState 
+        else: #uh oh! some input is left over
+            utilities.notice(self, "Cannot perform transform because dimension of forward state is greater than input dimension of transformer.")
+            raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")               
+          
+          
+    def calculateDimensions(self):
+        """Determines and returns the input and output dimensions of the transformer stack.
+        
+        The dimensionality of the transformer is defined as the number of degrees of freedom it accepts as inputs and that it
+        provides as outputs. Note that this method overrides transformer.calculateDimensions. Dimensionality is calculated
+        by summing the dimensions of the parallel items in the stack.
+        
+        returns dimensions as a tuple in the format (outputDimension, inputDimension), where:
+            outputDimension -- the number of degrees of freedom of the transformer output
+            inputDimension -- the number of degrees of freedom of the transformer input
+        """
+        inputDimension = 0
+        outputDimension = 0
+        for transformerElement in self.transformerStack:
+            outputSize, inputSize = transformerElement.getSize()
+            outputDimension += outputSize
+            inputDimension += inputSize
+        
+        return (outputDimension, inputDimension)
+
+
+def gang(transformer):
+    """Reduces the outputs of multiple single-axis transformers to one dimension.
+    
+    This object will convert multiple inputs to a single output, and is useful for e.g. machines that rely on multiple 
+    linear actuators moving in synchrony to maintain parallelism. This type of arrangement can be found on many varieties
+    of hobbyist-grade 3D printers and CNC machines.
+    """
+    pass

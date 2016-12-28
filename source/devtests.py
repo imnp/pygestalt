@@ -213,9 +213,21 @@ myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
 myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
  
 xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+yAxisChain = mechanics.chain(mechanics.stepper(1.8), mechanics.gear(2), mechanics.leadscrew(10))
+
+actuators = mechanics.stack(xAxisChain, yAxisChain)
+
 # 
-print xAxisChain.reverse(units.mm(10))
-print xAxisChain.forward(units.step(200))
+# print xAxisChain.reverse(units.mm(10))
+# print xAxisChain.forward(units.step(100))
+# print yAxisChain.forward(units.step(200))
+# print actuators.getSize()
+print actuators.forward([units.step(100), units.step(200)])
+print actuators.reverse([units.mm(2.5), units.mm(5)])
+
+testStack = mechanics.stack(xAxisChain)
+print testStack.forward(units.step(100))
+print testStack.reverse(units.mm(2.5))
 # 
 # matrix1 = geometry.matrix([[2,-2],[5,3]])
 # matrix2 = geometry.matrix([[-1,4],[7,-6]])
