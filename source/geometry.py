@@ -70,6 +70,43 @@ class array(list):
     def __getslice__(self, start, stop):
         """Depreciated method for handling single slice __getitem__ requests."""
         return self.__getitem__(slice(start, stop, None))
+    
+    def __add__(self, otherArray):
+        """Overrides left-hand addition to perform piece-wise addition of arrays.
+        
+        otherArray -- a list-formatted array to add to this array.
+        
+        returns a new array [b0, b1,..., bn] where b0 = self[0] + otherArray[0]
+        """
+        return type(self)(arrayAddition(self, otherArray))
+    
+    def __radd__(self, otherArray):
+        """Overrides right-hand addition to perform piece-wise addition of arrays.
+        
+        otherArray -- a list-formatted array to add to this array.
+        
+        returns a new array [b0, b1,..., bn] where b0 = otherArray[0] + self[0]
+        """
+        return type(self)(arrayAddition(otherArray, self))
+
+    def __sub__(self, otherArray):
+        """Overrides left-hand subtraction to perform piece-wise subtraction of arrays.
+        
+        otherArray -- a list-formatted array to subtract from this array.
+        
+        returns a new array [b0, b1,..., bn] where b0 = self[0] - otherArray[0]
+        """
+        return type(self)(arraySubtraction(self, otherArray))
+    
+    def __rsub__(self, otherArray):
+        """Overrides right-hand subtraction to perform piece-wise subtraction of arrays.
+        
+        otherArray -- a list-formatted array from which to subtract this array.
+        
+        returns a new array [b0, b1,..., bn] where b0 = otherArray[0] - self[0]
+        """
+        return type(self)(arraySubtraction(otherArray, self))
+        
 
 
 class matrix(array):
@@ -139,7 +176,13 @@ class matrix(array):
         power -- the degree to which to raise the matrix.
         
         """
-        pass
+        if power == 1:
+            return self
+        elif power == -1:
+            return self.inverse()
+        else:
+            raise errors.MatrixError("Cannot raise matrix to " + str(power) + " power. Can only invert by raising to -1.")
+            return False
 
 def identityMatrix(size):
     """Returns an identity matrix with 1s across the diagonal.
@@ -253,7 +296,30 @@ def arrayMultiplyByScalar(inputArray, scalar):
         return [arrayMultiplyByScalar(arrayItem, scalar) for arrayItem in inputArray]
     else:
         return inputArray*scalar
+
+def arrayAddition(leftArray, rightArray):
+    """Performs piece-wise addition of elements in two input arrays.
     
+    leftArray, rightArray -- the two arrays to add. For the purposes of recursion, these are also allowed to be scalars.
+    """
+    if isinstance(leftArray, list):
+        return [arrayAddition(*arrayItems) for arrayItems in zip(leftArray, rightArray)]
+    else:
+        return leftArray + rightArray
+
+def arraySubtraction(leftArray, rightArray):
+    """Performs piece-wise subtraction of elements in two input arrays.
+    
+    leftArray, rightArray -- the two arrays to perform the subtraction. For the purposes of recursion, these are also allowed to be scalars.
+    
+    Returns leftArray - rightArray
+    """
+    if isinstance(leftArray, list):
+        return [arraySubtraction(*arrayItems) for arrayItems in zip(leftArray, rightArray)]
+    else:
+        return leftArray - rightArray
+
+
     
 def matrixTranspose(inputMatrix):
     """Returns the transpose of a matrix.
@@ -408,9 +474,7 @@ def matrixInverse(inputMatrix):
                           [matrixDeterminant(g), matrixDeterminant(h), matrixDeterminant(i)]]
         
         return arrayMultiplyByScalar(inProcessArray, 1.0/det)
-        
-        
-    
+         
 
 def matrixHorizontalConcatenate(leftMatrix, rightMatrix):
     """Concatenates rightMatrix to the right of leftMatrix.
