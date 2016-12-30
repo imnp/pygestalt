@@ -222,12 +222,51 @@ actuators = mechanics.stack(xAxisChain, yAxisChain)
 # print xAxisChain.forward(units.step(100))
 # print yAxisChain.forward(units.step(200))
 # print actuators.getSize()
-print actuators.forward([units.step(100), units.step(200)])
-print actuators.reverse([units.mm(2.5), units.mm(5)])
+# print actuators.forward([units.step(100), units.step(200)])
+# print actuators.reverse([units.mm(2.5), units.mm(5)])
+# 
+# testStack = mechanics.stack(xAxisChain)
+# print testStack.forward(units.step(100))
+# print testStack.reverse(units.mm(2.5))
+# 
+# myCoreXY = mechanics.corexy()
+# print myCoreXY.forward([1,1])
+# print myCoreXY.reverse([1,0])
 
-testStack = mechanics.stack(xAxisChain)
-print testStack.forward(units.step(100))
-print testStack.reverse(units.mm(2.5))
+aAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.timingBelt(9.6))
+bAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.timingBelt(9.6))
+cAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.rack(5))
+coreXY = mechanics.corexy()
+
+# kinematics = mechanics.chain(mechanics.stack(aAxis, bAxis, cAxis), mechanics.stack(mechanics.corexy(), mechanics.passThru(1)))
+# print kinematics.reverse([units.mm(100), units.mm(100), units.mm(30)])
+
+outputOffset = mechanics.offset(3)
+kinematics2 = mechanics.chain(mechanics.stack(aAxis, bAxis, cAxis), mechanics.stack(mechanics.corexy(), mechanics.passThru(1)), mechanics.router([0,2,1]), outputOffset)
+# print kinematics2.reverse([units.mm(100), units.mm(30), units.mm(100)])
+# print kinematics2.reverse([units.mm(100), units.mm(100), units.mm(30)])
+print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
+
+outputOffset.adjust([-100, -30, -100])
+
+print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
+
+## ----array addition and subtraction--------
+# myArray1 = geometry.array([[1,2,3,4],[4,3,2,1]])
+# myArray2 = geometry.array([[5,6,6,5],[8,7,6,5]])
+# 
+# print geometry.arrayAddition(myArray1, myArray2)
+# print geometry.arraySubtraction(myArray1, myArray2)
+# print " "
+# print myArray1 + myArray2
+# print myArray1 + [[5,6,6,5], [8,7,6,5]]
+# print [[5,6,6,5], [8,7,6,5]] + myArray1
+# print myArray1 - [[5,6,6,5], [8,7,6,5]]
+# print [[5,6,6,5], [8,7,6,5]] - myArray1
+
+
+
+
 # 
 # matrix1 = geometry.matrix([[2,-2],[5,3]])
 # matrix2 = geometry.matrix([[-1,4],[7,-6]])

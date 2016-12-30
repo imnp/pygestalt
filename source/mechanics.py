@@ -4,7 +4,7 @@
 
 #---- INCLUDES ----
 import math
-from pygestalt import errors, units, utilities
+from pygestalt import errors, units, utilities, geometry
 
 class transformer(object):
     """Base class for all types that transform from one state to another.
@@ -274,6 +274,205 @@ class stepper(singleAxisElement):
         """
         
         super(stepper, self).__init__(transform = stepSize, inputUnits = units.step, outputUnits = units.deg)
+        
+
+
+#---- MULTI-AXIS KINEMATIC TRANSFORMERS ----
+class matrixTransformer(transformer):
+    """A matrix-based transformer.
+    
+    While the transformer class by default accepts matrices as forward and reverse transforms, the formatting expected
+    on the input and output of matrices must be 2D, whereas for transformers it is expected to be 1D. This class
+    performs the necessary pre-formatting of inputs and post-formatting of results.
+    """
+    
+    def forward(self, forwardState):
+        """Transform in the forward direction.
+        
+        forwardState -- a list-formatted single-row array containing the input state of the transformer.
+        
+        The purpose of this method is just to convert the input state into a 2D column matrix so it can be multiplied
+        by the forward transform matrix.
+        """
+        forwardStateMatrix = geometry.matrix(forwardState).transpose()
+        outputStateMatrix = self.forwardTransform*forwardStateMatrix
+        outputState = list(outputStateMatrix.transpose())[0]
+        return outputState
+    
+    def reverse(self, reverseState):
+        """Transform in the reverse direction.
+        
+        reverseState -- a list-formatted single-row array containing the output state of the transformer.
+        
+        The purpose of this method is just to convert the output state into a 2D column matrix so it can be multiplied
+        by the reverse transform matrix. 
+        """
+        reverseStateMatrix = geometry.matrix(reverseState).transpose()
+        inputStateMatrix = self.reverseTransform*reverseStateMatrix
+        inputState = list(inputStateMatrix.transpose())[0]
+        return inputState   
+    
+class corexy(matrixTransformer):
+    """CoreXY or H-bot based kinematics.
+    
+    See www.corexy.com
+    """
+    def __init__(self):
+        """Initializes a new corexy transformer."""
+        forwardTransform = geometry.matrix([[0.5, 0.5], [0.5, -0.5]])
+        super(corexy, self).__init__(forwardTransform = forwardTransform)
+
+
+#---- UTILITY TRANSFORMERS ----
+class router(transformer):
+    """A transformer that routes from a set of inputs to a set of outputs"""
+    def __init__(self, forwardRoutingMap):
+        """Initializes the routing transformer.
+        
+        forwardRoutingMap -- an ordered list whose indices correspond to the input positions, and whose values correspond to output positions.
+                      [output[0], output[1], ..., output[n]]
+                      
+        For example, to route input[0] to output[1] and vice versa, the routing map would be [1,0]. Note that the length of the
+        routingMap must exactly equal the number of inputs and outputs, and that all mappings must be specified.
+        """
+        self.forwardRoutingMap = forwardRoutingMap
+        
+        ###Need to add some checks here to make sure the routing map is valid
+        
+        self.reverseRoutingMap = range(len(forwardRoutingMap)) #placeholder for reverse routing map
+        for index, value in enumerate(self.forwardRoutingMap): #build reverse routing map
+            self.reverseRoutingMap[value] = index
+            
+        self.dimensions = self.calculateDimensions()
+
+    def forward(self, forwardState):
+        return [forwardState[index] for index in self.forwardRoutingMap]
+    
+    def reverse(self, reverseState):
+        return [reverseState[index] for index in self.reverseRoutingMap]
+
+    def calculateDimensions(self):
+        """Calculates and returns the dimensions of the router."""
+        routingMapSize = len(self.forwardRoutingMap)
+        return (routingMapSize, routingMapSize)        
+
+
+class offset(transformer):
+    """A transformer that applies a constant offset.
+    
+    This is useful for implementing homing and zeroing.
+    """
+    def __init__(self, dof):
+        """Initializes the offset.
+        
+        dof -- the number of degrees of freedom of the offset transformer.
+        """
+        self.dof = dof
+        self.dimensions = self.calculateDimensions()
+        self.offset = geometry.array([0.0 for degreeOfFreedom in range(self.dof)])
+    
+    def calculateDimensions(self):
+        """Calculates and returns the dimensions of the offset.
+        
+        The dimensions of the offset equals the number of degrees of freedom for both the inputs and the outputs.
+        """
+        return (self.dof, self.dof)
+
+    def set(self, offsetArray):
+        """Sets the offset to be internally applied by the transformer.
+        
+        offsetArray -- a list-formatted 1D array containing the offsets to apply. Note that the sign is in the forward direction, 
+                        i.e. for an offset of [3,4], output = input + offset.
+                        
+        This method is useful for setting the absolute position of a transformer chain, as is done in homing.
+        """
+        
+        if self.validateOffset(offsetArray):
+            self.offset = geometry.array(offsetArray)
+        else:
+            raise errors.MechanismError("Unable to set offset.")
+        
+    def adjust(self, adjustmentArray):
+        """Applies an adjustment to the offset.
+        
+        adjustmentArray -- a list-formatted array containing the values by which to change the internal offset.
+        
+        This method is useful for changing the desired output state of a transformer chain by a certain amount, as is done in zeroing.
+        """
+        if self.validateOffset(adjustmentArray):
+            self.offset = self.offset + geometry.array(adjustmentArray)
+        else:
+            raise errors.MechanismError("Unable to adjust offset.")
+
+    def forward(self, forwardState):
+        """Transform in the forward direction.
+        
+        forwardState -- a single value or list-formatted array containing the input state of the transformer.
+        
+        Offset is applied by adding it to forwardState
+        """
+        return list(forwardState + self.offset)
+    
+    def reverse(self, reverseState):
+        """Transform in the reverse direction.
+        
+        reverseState -- a single value or list-formatted array containing the output state of the transformer.
+        
+        Offset is applied by subtracting it from reverseState
+        """
+        return list(reverseState - self.offset)
+
+    def validateOffset(self, offsetArray):
+        """Validates that a provided offset array is compatible with the transformer.
+        
+        offsetArray -- the offset array to be validated.
+        
+        Returns True if validation passes, or False if not.
+        """                       
+        offsetSize = geometry.arraySize(offsetArray)
+        if len(offsetSize) > 1:
+            utilities.notice(self, "Provided offset array has a dimension of "+ str(len(offsetSize)) + ", and must be 1D!")
+            return False
+        elif offsetSize[0]!= self.dof:
+            utilities.notice(self, "Provided offset has a size of " + str(offsetSize[0]) + " DOF, but the transformer has " + str(self.dof)+ " DOF.")
+            return False
+        else:
+            return True        
+
+
+class passThru(transformer):
+    """A transformer that acts as a direct pass-thru of the input to the output.
+    
+    This type of transformer can act as a place-holder in a stack, so that the stack has the correct dimensionality.
+    """
+    def __init__(self, lanes):
+        """Initializes the pass-thru.
+        
+        lanes -- the number of dimensions the pass-thru will pass.
+        """
+        self.lanes = lanes
+        self.dimensions = self.calculateDimensions()
+    
+    def forward(self, forwardState):
+        """Transform in the forward direction.
+        
+        forwardState -- a single value or list-formatted array containing the input state of the transformer.
+        """
+        return forwardState
+    
+    def reverse(self, reverseState):
+        """Transform in the reverse direction.
+        
+        reverseState -- a single value or list-formatted array containing the output state of the transformer.
+        """
+        return reverseState
+    
+    def calculateDimensions(self):
+        """Calculates and returns the dimensions of the pass-thru.
+        
+        The dimensions of the pass-thru equals the number of lanes for both the inputs and the outputs.
+        """
+        return (self.lanes, self.lanes)
         
 
 #--- TRANSFORMER CONTAINERS ---
