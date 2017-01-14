@@ -185,37 +185,37 @@ import time
 # print mySpeed.convert(units.m/units.min**2)
 
 # ---MECHANICS---
-myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
+# myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
 # print myArray[0,1]
 # print type(myArray[0,:])
 
 # print units.mm/units.rev
 
-myLeadscrew = mechanics.leadscrew(units.rev(10)/units.inch(1))
+# myLeadscrew = mechanics.leadscrew(units.rev(10)/units.inch(1))
 # print myLeadscrew.forwardTransform
 # print myLeadscrew.forward(360*units.deg)
 # print myLeadscrew.reverse(0.25*units.inch)
 # print myLeadscrew.transform(360*units.deg)
 # print myLeadscrew.transform(units.mm(2.54))
 
-myGearbox = mechanics.gear(5)
+# myGearbox = mechanics.gear(5)
 # print myGearbox.forward(units.rad(6.28*5))
 # print myGearbox.reverse(units.deg(72))
 
-myTimingBelt = mechanics.timingBelt(18)
+# myTimingBelt = mechanics.timingBelt(18)
 # print myTimingBelt.forward(units.rev(1))
 
 # myStepperMotor = mechanics.stepperMotor(units.step(400)/units.rev(1))
 # print myStepperMotor.forward(units.step(200))
 
-myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
-myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
-myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
- 
-xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
-yAxisChain = mechanics.chain(mechanics.stepper(1.8), mechanics.gear(2), mechanics.leadscrew(10))
-
-actuators = mechanics.stack(xAxisChain, yAxisChain)
+# myLeadscrew = mechanics.leadscrew(units.mm(10)) #define a leascrew with a pitch of 10mm
+# myGearbox = mechanics.gear(2)  #define a gearbox with a ratio of 2:1
+# myStepper = mechanics.stepper(units.step(200)/units.rev(1)) #define a stepper motor with 200 steps per rev
+#  
+# xAxisChain = mechanics.chain(myStepper, myGearbox, myLeadscrew)
+# yAxisChain = mechanics.chain(mechanics.stepper(1.8), mechanics.gear(2), mechanics.leadscrew(10))
+# 
+# actuators = mechanics.stack(xAxisChain, yAxisChain)
 
 # 
 # print xAxisChain.reverse(units.mm(10))
@@ -233,23 +233,23 @@ actuators = mechanics.stack(xAxisChain, yAxisChain)
 # print myCoreXY.forward([1,1])
 # print myCoreXY.reverse([1,0])
 
-aAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.timingBelt(9.6))
-bAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.timingBelt(9.6))
-cAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.rack(5))
-coreXY = mechanics.corexy()
+# aAxis = mechanics.chain( mechanics.stepper(1.8), mechanics.timingBelt(9.6))
+# bAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.timingBelt(9.6))
+# cAxis = mechanics.chain(mechanics.stepper(1.8), mechanics.rack(5))
+# coreXY = mechanics.corexy()
 
 # kinematics = mechanics.chain(mechanics.stack(aAxis, bAxis, cAxis), mechanics.stack(mechanics.corexy(), mechanics.passThru(1)))
 # print kinematics.reverse([units.mm(100), units.mm(100), units.mm(30)])
 
-outputOffset = mechanics.offset(3)
-kinematics2 = mechanics.chain(mechanics.stack(aAxis, bAxis, cAxis), mechanics.stack(mechanics.corexy(), mechanics.passThru(1)), mechanics.router([0,2,1]), outputOffset)
+# outputOffset = mechanics.offset(3)
+# kinematics2 = mechanics.chain(mechanics.stack(aAxis, bAxis, cAxis), mechanics.stack(mechanics.corexy(), mechanics.passThru(1)), mechanics.router([0,2,1]), outputOffset)
 # print kinematics2.reverse([units.mm(100), units.mm(30), units.mm(100)])
 # print kinematics2.reverse([units.mm(100), units.mm(100), units.mm(30)])
-print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
+# print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
 
-outputOffset.adjust([-100, -30, -100])
+# outputOffset.adjust([-100, -30, -100])
 
-print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
+# print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
 
 ## ----array addition and subtraction--------
 # myArray1 = geometry.array([[1,2,3,4],[4,3,2,1]])
@@ -348,3 +348,13 @@ print kinematics2.forward([units.step(1326), units.step(0), units.step(381)])
 # matrix8 = geometry.matrix([[1,2,3],[4,5,6],[7,8,9]])
 # matrix9 = matrix8 * units.mm(1.0)
 # print matrix9[0,0]
+
+##----- Persistence -----
+
+persistenceManager = utilities.persistenceManager(filename = "../persistenceTest.vmp", namespace = 'myName')
+
+persistenceManager['hello'] = [5,6,7]
+print persistenceManager['hello']
+
+persistenceManager.set('goodbye', 'wuzzup')
+print persistenceManager.get('goodbye')
