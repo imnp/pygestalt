@@ -33,6 +33,7 @@ def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parent
         if functionName in thisClass.__dict__:  #check to make sure class has function defined in __dict__. This prevents calling a base class's method multiple times.
             thisClass.__dict__[functionName](instance, *args, **kwargs)   #call class function on instance with provided arguments
 
+
 def objectIdentifier(callingObject):
     """Returns a human-readable string identifier for a provided object.
     
@@ -98,6 +99,119 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
         return True
     else:
         return False
+
+
+class persistenceManager(object):
+    '''Provides a unified interface to persistence files.
+    
+    One of the challenges of Gestalt is maintaining state variables that are generated at run-time and should be recalled
+    after the Python interpreter is restarted. The classic use-case is maintaining the network address data that is used
+    to associate virtual nodes with their physical counterparts. When a networked node is initialized, the user is asked
+    to press a physical button to create the association. This causes the node to adopt the randomly generated address
+    transmitted as part of the association request. It ends up being a huge pain to need to redo this association every
+    time the virtual machine is restarted. A solution to this is to store the node and address information in a
+    'persistence file'. However it is possible to use persistence to store other information. 
+    
+    To keep the concept of persistence as general as possible, the persistence manager simply provides methods to store persistence 
+    information to a file as a key-value pairs, and to read it back. The only embelishment is that a namespace can be provided, 
+    which will be pre-pended followed by a dot to all keys. This enables multiple instances of a single virtual machine to 
+    share a common persistence file.
+    '''
+    
+    def __init__(self, filename = None, namespace = None):
+        """Initializes the persistence manager.
+        
+        filename -- the text string filename to be used for storing the persistence dictionary.
+        namespace -- an additional pre-pending text string identifier that enables further specificity in key names.
+                     Note that this namespace string will be pre-pended to all key names:  namespace.key
+        """
+        self.filename = filename
+        self.namespace = namespace
+    
+    def __call__(self):
+        """Returns self if the persistence manager instance is valid.
+        
+        Note that validity just means a filename has been provided. This enables a call to persistanceManagerInstance()
+        to determine if it's possible to store persistence information.
+        """
+        if self.filename: return self   #valid filename
+        else: return False  
+
+    def get(self, key):
+        """Returns a key stored in the persistence file.
+        
+        key -- the string key of a value ot be retrieved.
+        
+        returns value
+        """
+        
+        persistenceDictionary = self.readPersistenceDictionary() #read in persistence dictionary from file.
+        
+        if self.namespace:  #a namespace is used
+            key = self.namespace + '.' + key #prepend namespace
+            
+        if key in persistenceDictionary:
+            return persistenceDictionary[key]
+        else:
+            return None
+
+    def __getitem__(self, key):
+        """Allows access of values with persistenceManager[key] notation."""
+        return self.get(key)
+
+
+    def set(self, key, value):
+        """Stores a new key-value pair in the persistence file.
+        
+        key -- the string key of the value to be stored.
+        value -- the value to be stored.
+        """
+        
+        persistenceDictionary = self.readPersistenceDictionary() #read in persistence dictionary from file.
+        
+        if self.namespace: #a namespace is used
+            key = self.namespace + '.' + key
+        
+        persistenceDictionary.update({key: value}) #update the dictionary
+        self.writePersistenceDictionary(persistenceDictionary) #write back out the dictionary
+
+    def __setitem__(self, key, value):
+        """Allows setting key:value pairs with persistenceManagerInstance[key] = value notation."""
+        self.set(key, value)        
+    
+    
+    def readPersistenceDictionary(self):
+        """Reads a string-encoded dictionary from a persistence file and returns it as a dictionary object.
+        
+        Returns the stored dictionary object.
+        """
+        try: #try to read in a dictionary
+            fileObject = open(self.filename, 'rU')
+            persistenceDictionary = ast.literal_eval(fileObject.read()) #safely evaluate the dictionary.
+            fileObject.close()  #close out the dictionary so it is avaliable for other persistenceManager instances.
+            return persistenceDictionary
+        except IOError: #had an IO error, so return an empty dictionary. Maybe the file doesn't exist?
+            return {}
+    
+    def writePersistenceDictionary(self, persistenceDictionary):
+        """Stores a dictionary file to the persistence file.
+        
+        persistenceDictionary -- the dictionary object to be stored.
+        """
+        fileObject = open(self.filename, 'w')
+        fileObject.write("# This pyGestalt persistence file was auto-generated @ " + str(datetime.datetime.now()) + "\n")
+        fileObject.write("{\n")
+        for key in persistenceDictionary:
+            value = persistenceDictionary[key]
+            if type(value) == str: #need to wrap value in quotes so it gets parsed correctly on read
+                formattedValue = '"'+value + '"'
+            else:
+                formattedValue = str(value)
+            
+            fileObject.write("'" + key + "'" + ":" + formattedValue + ",\n")
+        fileObject.write("}")
+        fileObject.close()
+
 
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.
