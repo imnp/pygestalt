@@ -275,7 +275,12 @@ class stepper(singleAxisElement):
         
         super(stepper, self).__init__(transform = stepSize, inputUnits = units.step, outputUnits = units.deg)
         
-
+class invert(transformer):
+    """A single-axis utility element that inverts the sign of the signal passing thru it."""
+    
+    def __init__(self):
+        """Initializes a new inverter."""
+        super(invert, self).__init__(forwardTransform = -1.0)
 
 #---- MULTI-AXIS KINEMATIC TRANSFORMERS ----
 class matrixTransformer(transformer):
