@@ -1008,8 +1008,26 @@ class soloGestaltNode(gestaltNodeShell):
     This container is provided to make user code more clear in terms of the type of node. For now, there is no functional difference between
     solo and networked gestalt nodes at the base virtual node level.
     """
-    pass
+    def _shellInit_(self, *args, **kwargs):
+        if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
+            self._virtualNode_ = soloGestaltVirtualNode(*args, **kwargs)    
 
+class networkedGestaltNode(gestaltNodeShell):
+    """The node shell type for networked gestalt nodes.
+    
+    This container is provided to make user code more clear in terms of the type of node. For now, there is no functional difference between
+    solo and networked gestalt nodes at the base virtual node level.
+    """
+    def _shellInit_(self, *args, **kwargs):
+        """Initializes the virtual node shell.
+        
+        While there are no functional differences at present between a solo and networked node, a user message is displayed during address 
+        acquisition if the node type is a networkedGestaltNode. In order to trigger this message, we over-ride the type of node used on default
+        to be a networkedGestaltVirtualNode.
+        """
+        if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
+            self._virtualNode_ = networkedGestaltVirtualNode(*args, **kwargs)
+                
 class arduinoGestaltNode(gestaltNodeShell):
     """The node shell type for arduino-based gestalt nodes.
     
