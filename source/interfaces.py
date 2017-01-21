@@ -409,11 +409,14 @@ class gestaltInterface(baseInterface):
         name -- a user-provided name for the interface for use by utilities.notice.
         interface -- a downstream communications interface such as a serial port.
         persistence -- the persistence file that stores virtual/physical node associations
+                    -- if a True bool: a generic persistence file will be used.
+                    -- if a string: string will be treated as the filename for the persistence file.
+                    -- if a persistenceManager object: this object will be used.
         """
         # Initialize Parameters
         self._name_ = name  #the interface's name for notification purposes
         self._interface_ = interface    #the downstream interface, e.g. a serial port
-        self._persistence_ = persistence    #persistence file for storing virtual/physical node associations
+        self._persistenceManager_ = self._generatePersistenceManager_(persistence)   #persistence object for storing virtual/physical node associations
         self._nodeAddressTable_ = {}    #{virtualNode:address} pairs for outbound transmissions
         self._addressNodeTable_ = {}     #{address:virtualNode} pairs for inbound transmissions
         self._shellNodeTable_ = {}          #maintains associations between virtual node shells and their contained nodes
@@ -432,6 +435,76 @@ class gestaltInterface(baseInterface):
         if self._interface_: self._interface_.start()   #start up whatever downstream interface was provided.
         self._startInterfaceThreads_()  #start up interface threads 
         
+    
+    def _generatePersistenceManager_(self, persistenceArgument):
+        """Generates a persistence manager for the Gestalt interface.
+        
+        A persistence manager is a utility object that aids in storing persistent data that must be saved after the interpreter shuts
+        down. This function will interpret the persistenceArgument provided to the Gestalt interface and will return an appropriate
+        persistence manager object if possible.
+        
+        persistenceArgument -- if a True Bool: a generic persistence file will be used.
+                            -- if a String: the string will be interpreted as a filename for the persistence file.
+                            -- if a utilities.persistenceManager object: the object will be used directly.
+        """
+        if type(persistenceArgument) == bool and persistenceArgument:
+            #a True bool was provided as the input argument. Create a new persistene manager that uses a default file.
+            persistenceFilename = "defaultPersistence.vmp"
+            return utilities.persistenceManager(persistenceFilename)
+        
+        elif type(persistenceArgument) == str:
+            #A string was provided as the persistence manager, so use that string as the filename
+            return utilities.persistenceManager(persistenceArgument)
+        
+        elif type(persistenceArgument) == utilities.persistenceManager:
+            # a utilities.persistenceManager object was provided, so use that.
+            return persistenceArgument
+        
+        else:
+            return None
+                
+    
+    def _getNodePersistentAddress_(self, virtualNode):
+        """Attempts to get the address of a virtual node using the gestalt interface's persistence manager.
+        
+        virtualNode -- the virtualNode object whose address should be recalled
+        
+        Returns:
+        persistentAddress -- the saved persistent address if possible to recall, or None if not.
+        """
+        
+        if self._persistenceManager_: #persistence is configured
+            if hasattr(virtualNode, '_name_'): #node has a _name_ attribute
+                if virtualNode._name_: #node name has been provided
+                    persistentAddress = self._persistenceManager_[virtualNode._name_]
+                    return persistentAddress
+                else: #node has name attribute but it wasn't set by user.
+                    debugNotice(virtualNode, 'persistence', "Unable to retrieve node address from persistence file. Node has no name.")
+                    return None
+            else: #node has no _name_ attribute. This means it doesn't sublcass the baseGestaltVirtualNode base class, which is strange.
+                debugNotice(virtualNode, 'persistence', "Unable to retrieve node address from persistence file. Node has no _name_ attribute.")
+                return None
+        else: #persistence isn't configured, so simply return None
+            return None
+
+    def _setNodePersistentAddress_(self, virtualNode, persistentAddress):
+        """Attempts to set the address of a virtual node using the gestalt interface's persistence manager.
+        
+        virtualNode -- the virtualNode object whose address should be stored
+        persistentAddress - the address to be stored persistently
+        
+        Returns: None
+        """
+        
+        if self._persistenceManager_: #persistence is configured
+            if hasattr(virtualNode, '_name_'): #node has a _name_ attribute
+                if virtualNode._name_: #node name has been provided
+                    self._persistenceManager_[virtualNode._name_] = persistentAddress
+                else: #node has name attribute but it wasn't set by user.
+                    debugNotice(virtualNode, 'persistence', "Unable to set node address in persistence file. Node has no name.")
+            else: #node has no _name_ attribute. This means it doesn't sublcass the baseGestaltVirtualNode base class, which is strange.
+                debugNotice(virtualNode, 'persistence', "Unable to set node address in persistence file. Node has no _name_ attribute.")
+
     def _pullNewAddress_(self):
         """Generates a not-in-use address to be assigned to a new node.
         
@@ -471,15 +544,16 @@ class gestaltInterface(baseInterface):
         """
         self._nodeAddressTable_.update({virtualNode:address})   #insert new node into node:address table
         self._addressNodeTable_.update({address:virtualNode})
-        
-
+    
+    
     def attachNode(self, virtualNode):
         """Attaches a node to the Gestalt interface.
         
         virtualNode -- the node instance to attach to the interface
         
         Returns:
-        newAddress -- the value of the new address, or False if no new address was necessary
+        newAddress -- the value of the new address, or False if no new address was necessary. A new address might not be necessary
+                      if either the node object is being replaced, or if the address is stored persistently.
         """
         if virtualNode._shell_ and (virtualNode._shell_ in self._shellNodeTable_):
             #The shell has already been affiliated with an attched node in the past, implying that the new attach request
@@ -487,15 +561,22 @@ class gestaltInterface(baseInterface):
             #to the current node with references from the new node.
             oldVirtualNode = self._shellNodeTable_[virtualNode._shell_]
             self._replaceNode_(currentNode = oldVirtualNode, newNode = virtualNode) #replace node-address mapping
-            newAddress = False
+            newAddress = False #no new address
+            
         else:
-            #persistence check goes here. That'll be fun :-)
-            newAddress = self._pullNewAddress_()
-            self._updateNode_(virtualNode, newAddress)
-            newAddress = self._nodeAddressTable_[virtualNode]
+            persistentAddress = self._getNodePersistentAddress_(virtualNode)
+            if type(persistentAddress) == int: 
+                #a valid new address was successfully retrieved from persistence manager.
+                self._updateNode_(virtualNode, persistentAddress) #set the recalled address of the node in the node-address maps
+                newAddress = False #no new address
+            else:
+                #unable to retrieve an address, so a new one needs to be assigned.
+                newAddress = self._pullNewAddress_()    #unable to retrieve an address, so pull a new one.
+                self._setNodePersistentAddress_(virtualNode, newAddress) #try to store new address
+                self._updateNode_(virtualNode, newAddress) #set new address in the node-address maps
+                newAddress = self._nodeAddressTable_[virtualNode]
             
         self._shellNodeTable_.update({virtualNode._shell_:virtualNode}) #update shell node table
-        
         return newAddress
     
     

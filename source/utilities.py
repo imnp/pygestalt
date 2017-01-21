@@ -85,6 +85,7 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
     Currently assigned channels:
         comm -- messages related to communications. Mostly coming from the interfaces module.
         units -- messages related to dimensionality of numbers
+        persistence -- messages related to virtual machine persistence
     
     Returns True if notice was printed (verbose debug is enabled), or False otherwise
     """
@@ -153,6 +154,7 @@ class persistenceManager(object):
         if key in persistenceDictionary:
             return persistenceDictionary[key]
         else:
+            debugNotice(self, 'persistence', 'Unable to retrieve persistence key ' + str(key) + 'from persistence file.')
             return None
 
     def __getitem__(self, key):
@@ -177,8 +179,7 @@ class persistenceManager(object):
 
     def __setitem__(self, key, value):
         """Allows setting key:value pairs with persistenceManagerInstance[key] = value notation."""
-        self.set(key, value)        
-    
+        self.set(key, value)
     
     def readPersistenceDictionary(self):
         """Reads a string-encoded dictionary from a persistence file and returns it as a dictionary object.
@@ -190,7 +191,8 @@ class persistenceManager(object):
             persistenceDictionary = ast.literal_eval(fileObject.read()) #safely evaluate the dictionary.
             fileObject.close()  #close out the dictionary so it is avaliable for other persistenceManager instances.
             return persistenceDictionary
-        except IOError: #had an IO error, so return an empty dictionary. Maybe the file doesn't exist?
+        except IOError as e: #had an IO error, so return an empty dictionary. Maybe the file doesn't exist?
+            debugNotice(self, 'persistence', e)
             return {}
     
     def writePersistenceDictionary(self, persistenceDictionary):
@@ -309,7 +311,7 @@ def fuzzyEquals(number1, number2, tolerance):
     if abs(delta)< tolerance:
         return True
     else: return False
-    
+        
 class CRC():
     """Generates and validates CRC values."""
     def __init__(self, polynomial = 7):
