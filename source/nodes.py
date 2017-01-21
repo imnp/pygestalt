@@ -106,7 +106,7 @@ class baseGestaltVirtualNode(baseVirtualNode):
         else:   #could not start application
             utilities.callFunctionAcrossMRO(self, "onLoad")
             return self
-            
+             
     
     def init(self, *args, **kwargs):
         """User initialization routine for defining optional constants etc. that are specific to the node hardware.
@@ -354,6 +354,7 @@ class baseGestaltVirtualNode(baseVirtualNode):
             return True
         else:
             return False
+        
     
 class gestaltVirtualNode(baseGestaltVirtualNode):
     """The standard Gestalt node class.
@@ -593,7 +594,7 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
                         notice(self.virtualNode, "Received invalid response from node to bootloader command "+ command + ".")
                         return False
                 else:
-                    notice(self.virualNode, "No response to bootloader command "+ command + ".")
+                    notice(self.virtualNode, "No response to bootloader command "+ command + ".")
                     return False
             else:
                 notice(self.virtualNode, "Bootloader command " + command + " not recognized.")
