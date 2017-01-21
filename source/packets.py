@@ -389,7 +389,7 @@ class template(object):
 class packetToken(object):
     """Base class for creating packet tokens, which are elements that handle encoding and decoding each segment of a packet."""
     
-    def __init__(self, keyName, *args):
+    def __init__(self, keyName, *args, **kwargs):
         """Initialize a new packet token.
         
         keyName -- a reference name for the token that will match a key in an encoding dictionary, or be provided as a key during decoding.
@@ -399,9 +399,9 @@ class packetToken(object):
         self.requireEncodeDict = True   #by default, tokens require an encode dictionary in order to encode packets. Exceptions include length and checksum tokens.
         self.size = 0   # by default, tokens encode to and decode from a list of predetermined size. Exceptions incude pList, pString, and packet tokens.
                         # size = 0 means it has no predetermined size, which is a fail-safe default for validation.
-        self.init(*args)    # call subclass init function to do something with additional arguments.
+        self.init(*args, **kwargs)    # call subclass init function to do something with additional arguments.
     
-    def init(self, *args):
+    def init(self, *args, **kwargs):
         """Secondary initializer should be over-ridden by subclass.""" 
         pass
     
