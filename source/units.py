@@ -562,6 +562,9 @@ gf = unit('gf', 'gram force', kgf, 1000.0)
 ozf = unit('ozf', 'ounce force', gf, 0.035274)
 lbf = unit('lbf', 'pound force', ozf, 1.0/16.0)
 
+# electrical
+V = unit('V', 'volt')
+A = unit('A', 'amp')
 # pseudo-units
 # these units are just to make it easier to keep track of transformations thru the system, and are not necessarily SI units
 step = unit('step', 'step') #steps are base units
