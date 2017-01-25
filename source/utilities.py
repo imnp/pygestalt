@@ -101,7 +101,38 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
     else:
         return False
 
-
+def generatePersistenceManager(inputArgument, namespace = None):
+    """Generates a persistence manager base on an input argument.
+    
+    A persistence manager is a utility object that aids in storing persistent data that must be saved after the interpreter shuts
+    down. This function will interpret the input argument provided and will return an appropriate
+    persistence manager object if possible.
+    
+    inputArgument -- if a True Bool: a generic persistence file will be used.
+                        -- if a String: the string will be interpreted as a filename for the persistence file.
+                        -- if a utilities.persistenceManager object: the object will be used directly.
+    
+    namespace -- a text string used to specify a namespace for the persistence manager. This allows multiple identical VMs to share
+                a common persistence file.
+    """
+    if type(inputArgument) == bool and inputArgument:
+        #a True bool was provided as the input argument. Create a new persistence manager that uses a default file.
+        persistenceFilename = "defaultPersistence.vmp"
+        return persistenceManager(persistenceFilename, namespace)
+    
+    elif type(inputArgument) == str:
+        #A string was provided as the persistence manager, so use that string as the filename
+        return persistenceManager(inputArgument, namespace)
+    
+    elif type(inputArgument) == persistenceManager:
+        # a persistenceManager object was provided, so use that.
+        if namespace:
+            inputArgument.namespace = namespace #update the namespace used by the persistence manager
+        return inputArgument
+    
+    else:
+        return None
+        
 class persistenceManager(object):
     '''Provides a unified interface to persistence files.
     
@@ -213,7 +244,7 @@ class persistenceManager(object):
             fileObject.write("'" + key + "'" + ":" + formattedValue + ",\n")
         fileObject.write("}")
         fileObject.close()
-
+        
 
 def unsignedIntegerToBytes(integer, numbytes):
     """Converts an unsigned integer into a sequence of bytes, LSB first.
