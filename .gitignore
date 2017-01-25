@@ -19,3 +19,4 @@
 *.ko
 *.obj
 *.elf
+*.vmp
