@@ -416,7 +416,7 @@ class gestaltInterface(baseInterface):
         # Initialize Parameters
         self._name_ = name  #the interface's name for notification purposes
         self._interface_ = interface    #the downstream interface, e.g. a serial port
-        self._persistenceManager_ = self._generatePersistenceManager_(persistence)   #persistence object for storing virtual/physical node associations
+        self.setPersistenceManager(utilities.generatePersistenceManager(persistence))   #persistence object for storing virtual/physical node associations
         self._nodeAddressTable_ = {}    #{virtualNode:address} pairs for outbound transmissions
         self._addressNodeTable_ = {}     #{address:virtualNode} pairs for inbound transmissions
         self._shellNodeTable_ = {}          #maintains associations between virtual node shells and their contained nodes
@@ -434,35 +434,7 @@ class gestaltInterface(baseInterface):
         
         if self._interface_: self._interface_.start()   #start up whatever downstream interface was provided.
         self._startInterfaceThreads_()  #start up interface threads 
-        
-    
-    def _generatePersistenceManager_(self, persistenceArgument):
-        """Generates a persistence manager for the Gestalt interface.
-        
-        A persistence manager is a utility object that aids in storing persistent data that must be saved after the interpreter shuts
-        down. This function will interpret the persistenceArgument provided to the Gestalt interface and will return an appropriate
-        persistence manager object if possible.
-        
-        persistenceArgument -- if a True Bool: a generic persistence file will be used.
-                            -- if a String: the string will be interpreted as a filename for the persistence file.
-                            -- if a utilities.persistenceManager object: the object will be used directly.
-        """
-        if type(persistenceArgument) == bool and persistenceArgument:
-            #a True bool was provided as the input argument. Create a new persistene manager that uses a default file.
-            persistenceFilename = "defaultPersistence.vmp"
-            return utilities.persistenceManager(persistenceFilename)
-        
-        elif type(persistenceArgument) == str:
-            #A string was provided as the persistence manager, so use that string as the filename
-            return utilities.persistenceManager(persistenceArgument)
-        
-        elif type(persistenceArgument) == utilities.persistenceManager:
-            # a utilities.persistenceManager object was provided, so use that.
-            return persistenceArgument
-        
-        else:
-            return None
-                
+
     
     def _getNodePersistentAddress_(self, virtualNode):
         """Attempts to get the address of a virtual node using the gestalt interface's persistence manager.
@@ -545,6 +517,17 @@ class gestaltInterface(baseInterface):
         self._nodeAddressTable_.update({virtualNode:address})   #insert new node into node:address table
         self._addressNodeTable_.update({address:virtualNode})
     
+    def setPersistenceManager(self, persistenceManager):
+        """Sets the interface's persistence manager to the provided utilities.persistenceManager object.
+        
+        persistenceManager -- a utilities.persistenceManager object.
+        """
+        
+        if isinstance(persistenceManager, utilities.persistenceManager):
+            self._persistenceManager_ = persistenceManager
+        else:
+            self._persistenceManager_ = None
+        
     
     def attachNode(self, virtualNode):
         """Attaches a node to the Gestalt interface.
