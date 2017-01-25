@@ -54,6 +54,7 @@ class baseGestaltVirtualNode(baseVirtualNode):
         name -- the name of the node
         interface -- the interface to use for communication
         _shell_ -- if the node is set within a shell, the shell object passes along a self-reference here
+        synthetic -- if True, enables synthetic mode for the node
         
         Returns the active virtual node instance
         """
