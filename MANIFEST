@@ -7,6 +7,7 @@ source/./devtests.py
 source/./errors.py
 source/./geometry.py
 source/./interfaces.py
+source/./machines.py
 source/./mechanics.py
 source/./nodes.py
 source/./packets.py
