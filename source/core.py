@@ -227,12 +227,14 @@ class actionObject(object):
                 return False
         return True        
     
-    def transmitUntilResponse(self, timeout = 0.2, mode = 'unicast', attempts = 10):
+    def transmitUntilResponse(self, timeout = 0.2, mode = 'unicast', attempts = 10, releaseChannelOnTransmit = True):
         """Persistently transmits until a response is received from the node.
         
         timeout -- the time (in seconds) to wait for a reply between re-attempts
         mode -- the transmission mode, either 'unicast' to direct at a single node, or 'multicast' to direct at all nodes
         attempts -- the number of transmission attempts before giving up.
+        releaseChannelOnTransmit -- If True (default), will automatically release the actionObject's channel lock after transmission.
+                                    It may be desirable to retain the channel lock if multiple transmissions are to be made.
         
         This is an area in which to potentially improve Gestalt, by building in some functionality that
         can identify and respond intelligently to when a node goes down.
@@ -240,7 +242,7 @@ class actionObject(object):
         for thisAttempt in range(attempts): #make multiple attempts to receive a response
             self.transmit(mode = mode, releaseChannelOnTransmit = False)
             if self.waitForResponse(timeout):   #a response was received!
-                self._releaseChannelAccessLock_()   #release access to the channel
+                if releaseChannelOnTransmit: self._releaseChannelAccessLock_()   #release access to the channel
                 return True
             else:
                 if thisAttempt+1 < attempts:    #not the final attempt
