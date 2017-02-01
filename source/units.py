@@ -265,7 +265,7 @@ class dFloat(float):
             if self.units != other.units: #check to make sure units match
                 raise errors.UnitError("addition operand units don't match")
         return dFloat(value, units)        
-        
+    
     def __rsub__(self, other):
         """Overrides right-handed subtraction.
         
@@ -277,6 +277,19 @@ class dFloat(float):
         units = unitDictionary(self.units)
         return dFloat(value, units)
     
+    def __neg__(self):
+        """Overrides negation."""
+        value = -float(self)
+        units = unitDictionary(self.units)
+        return dFloat(value, units)
+    
+    def __abs__(self):
+        """Overrides absolute value."""
+        value = abs(float(self))
+        units = unitDictionary(self.units)
+        return dFloat(value, units)
+        
+        
     def __mul__(self, other):
         """Overrides left-hand multiplication.
         
