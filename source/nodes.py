@@ -11,6 +11,9 @@ import copy
 from pygestalt import core, packets, utilities, interfaces, config
 from pygestalt.utilities import notice, debugNotice
 
+
+#---- GESTALT NODES ----
+
 class baseVirtualNode(object):
     """Base class for all virtual nodes"""
     
@@ -802,7 +805,10 @@ class networkedGestaltVirtualNode(gestaltVirtualNode):
     name should be displayed on association, to notify the user that they need to press a button.
     """
     pass
-    
+
+
+#---- NODE SHELLS ----
+ 
 class nodeShell(object):
     """A virtual node container to support hot-swapping virtual nodes while maintaining external references.
     
@@ -1039,4 +1045,52 @@ class arduinoGestaltNode(gestaltNodeShell):
     """
     def _shellInit_(self, *args, **kwargs):
         if not self._virtualNode_: #no virtual node was provided, so use a default gestalt node
-            self._virtualNode_ = arduinoGestaltVirtualNode(*args, **kwargs)    
+            self._virtualNode_ = arduinoGestaltVirtualNode(*args, **kwargs)  
+
+
+#---- COMPOUND NODES ----  
+
+class compoundNode(object):
+    """Distributes and synchronizes function calls across multiple nodes.
+    
+    Grouping nodes together under the banner of a 'compound node' serves two purposes. First, it provides convenience by allowing a single
+    function call to be issued to multiple nodes. For example, five nodes might have their firmware updated by a single call to a
+    containing compound node. Second, nodes can be functionally grouped together to synchronously perform tasks. This is perhaps one of 
+    the most exciting elements of Gestalt -- being able to logically treat three single-axis nodes as a single three-axis node.
+    
+    A call to a compound node is distributed to the consituent nodes according to the following rule, depending on the type of the
+    positional or named argument that was provided:
+        tuple -- each element in the tuple is uniquely distributed to individual constituent nodes based on the position inside the tuple.
+        everything else -- each element is distributed to all constituent nodes.
+        
+    For example: myCompoundNode.functionName((1,2,3), 4, thisSetting = 5) would distribute as node1.functionName(1,4, thisSetting = 5),
+    node2.functionName(2,4, thisSetting=5), and node3.functionName(3,4, thisSetting = 5).
+    """
+    
+    def __init__(self, *nodes):
+        """Initializes the compound node.
+        
+        nodes -- any number of virtualNode objects, provided as positional arguments.
+        
+        Note that the order in which the virtual nodes are provided will dictate the mapping between function calls to the compound
+        node and how they are distributed to the constituent nodes (provided that the arguments of the function calls are within
+        tuples for distribution, per above.)
+        """
+        self._nodes_ = nodes
+        self._size_ = len(nodes)
+        self._name_ = '[' + ''.join([str(node._name_) + ',' for node in self._nodes_])[:-1] + ']'
+        self._commonInterface_ = self._validateInterfaceConsistency_() #stores whether all constituent nodes share a common interface.
+        if not self._commonInterface_: notice(self, 'Warning - Not all members of compound node share a common interface!') #non-blocking warning
+    
+    def _validateInterfaceConsistency_(self):
+        """Tests whether all constituent nodes share a common interface.
+        
+        Returns True if all constituent nodes share a common interface. Otherwise returns False.
+        """
+        interfaces = [node._interface_ for node in self._nodes_] #a list of all constituent node interfaces
+        return all(interface == interfaces[0] for interface in interfaces) #check that all interfaces are the same
+        
+    
+    
+    
+    

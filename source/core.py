@@ -7,6 +7,7 @@ import copy
 import threading
 from pygestalt.utilities import notice
 
+
 class actionObject(object):
     """A token that embodies the logic behind packet generation.
     
@@ -310,4 +311,11 @@ class genericOutboundActionObject(actionObject):
 
 class genericInboundActionObject(actionObject):
     """A generic actionObject type designed to receive."""
+    pass
+
+
+#--- SYNCHRONIZATION ---
+
+class syncToken(object):
+    """A token object used to synchronize multiple nodes on a network."""
     pass

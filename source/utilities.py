@@ -11,6 +11,102 @@ import itertools
 import sys
 from pygestalt import config
 
+
+def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *arguments, **keywordArguments):
+    """Distributes a function call across a list of target objects.
+    
+    owner -- A reference to the initiating object. This is used for providing notices.
+    targetList -- a list of target objects across which the function call will be distributed
+    attribute -- the attribute name that should be called
+    syncTokenType -- A reference to a token class that should be used for synchronization IN THE EVENT THAT THERE ARE UNIQUELY
+                     DISTRIBUTED ARGUMENTS, or False or None if no synchronization tokens are to be injected.
+    arguments -- positional arguments to be forwarded on to the targets. Any tuples will be uniquely distributed based on
+            the position in the tuple. Other types will be evenly distributed to all targets
+    keywordArguments -- keyword arguments to be forwarded on to the targets. Same distribution rules as for positional arguments.
+    
+    This function will make a function call at the provided attribute on all objects in the provided target list. If any of
+    the positional arguments in args, or the keyword arguments in kwargs, are provided as a tuple, these arguments will be uniquely
+    distributed to all objects in targetList. For example, distributedFunctionCall(callOwner, [obj1, obj2], funcName, (1,2), myArg = 3)
+    would be result in calls obj1.funcName(1, myArg = 3) and obj1.funcName(2, myArg = 3).
+    
+    Note that the common use is for a reference to this function to be passed as part of a functools.partial object. While this function
+    may serve other purposes, it is primarily intended to be used in the context of compound nodes.
+    
+    In the event that uniquely distributed arguments exist, we assume that the function call should be synchronized across the
+    targets. In order to accomplish this, a synchronization token type can be passed to this method. An instance of this token will
+    be generated and injected into the kwargs of the distributed function calls with the key 'sync'. To prevent this behavior,
+    None or False can be provided to this method instead.
+    
+    Return values for each of these calls will be returned as a tuple. If an error occurs, returns False instead.
+    """
+    
+    #-- Initialization --
+    targetCount = len(targetList) #total number of target objects
+    expandedArguments = [] #stores positional arguments as [[arg1_target1, arg1_target2, ...], [arg2_target1, arg2_target2]]
+    expandedKeywordArguments = [] #stores keyword arguments as [[{arg1_target1},{arg1_target2}],[{arg2_target1},{arg2_target2}]]
+    uniqueDistribution = False #starts as False, but set to True should any arguments require unique distribution
+    
+    #-- Organize Positional Arguments --
+    for argument in arguments: #iterate over all provided positional arguments
+        if type(argument) == tuple: #uniquely distributed argument
+            uniqueDistribution = True #flag that unique distribution is required
+            if len(argument) == targetCount: #there are the correct number of provided arguments
+                expandedArguments += [list(argument)] #simply convert tuples to a list
+            else: #incorrect number of arguments provided!
+                notice(owner, attribute + ': incorrect number of arguments provided!')
+                return False
+        else: #evenly distributed argument
+            expandedArguments += [[argument for target in targetList]]
+    
+    collectedArguments = zip(*tuple(expandedArguments)) #a list of tuples: [(arg1_target1, arg2_target1), (arg1_target2, arg2_target2)]
+    
+    #-- Organize Keyword Arguments --
+    for key, value in keywordArguments.iteritems(): #iterate over all provided keyword arguments
+        if type(value) == tuple: #uniquely distributed argument
+            uniqueDistribution = True
+            if len(value) == targetCount: #there are the correct number of provided arguments
+                expandedKeywordArguments += [[{key:thisValue} for thisValue in value]]
+            else: #incorrect number of arguments provided
+                notice(owner, attribute + ': incorrect number of arguments provided for keyword argument "' + key +'"!')
+                return False
+        else: #evenly distributed argument
+            expandedKeywordArguments += [[{key:value} for target in targetList]]
+    
+    zippedKeywordArguments = zip(*tuple(expandedKeywordArguments)) # a list of tuples: [({arg1_target1},{arg2_target1}), ({arg1_target2}, arg2_target2})]
+    collectedKeywordArguments = [{key:value for pair in thisTuple for key, value in pair.items()} for thisTuple in zippedKeywordArguments]
+        # The above results in [{arg1_target1, arg2_target1}, {arg1_target2, arg2_target2}]
+    
+    #-- Synchronization --
+    if uniqueDistribution and syncTokenType: #unique distribution has occured, and syncronization is enabled
+        syncToken = syncTokenType() #generate a new syncronization token
+        for keywordDictionary in collectedKeywordArguments: keywordDictionary.update({'sync':syncToken}) #updates all kwarg dictionaries
+    
+    #-- Function Calls --
+    return tuple([callFunctionWithChecking(owner, target, attribute, *args, **kwargs) for target, args, kwargs in zip(targetList, collectedArguments, collectedKeywordArguments)])
+
+
+
+def callFunctionWithChecking(owner, target, attribute, *args, **kwargs):
+    """Calls a function on a target with a provided set of positional and keyword arguments.
+    
+    owner -- A reference to the initiating object. Used for providing notices.
+    target -- the target object
+    attribute -- the name of the method to be called
+    args -- positional arguments
+    kwargs -- keyword arguments
+    
+    The purpose of wrapping the function call like this is to provide feedback if the attribute doesn't exist.
+    
+    Returns the result of the function call.
+    """
+    if hasattr(target, attribute):
+        return getattr(target, attribute)(*args, **kwargs)
+    else:
+        notice(owner, type(owner).__name__.upper() + " DOESN'T HAVE THE REQUESTED ATTRIBUTE '" + attribute + "'.")
+        raise AttributeError(attribute)
+    
+    
+
 def callFunctionAcrossMRO(instance, functionName, args = (), kwargs = {}, parentToChild = True):
     """Calls a function on all classes in instance's method resolution order.
     

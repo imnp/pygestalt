@@ -351,10 +351,21 @@ import time
 
 ##----- Persistence -----
 
-persistenceManager = utilities.persistenceManager(filename = "../persistenceTest.vmp", namespace = 'myName')
+# persistenceManager = utilities.persistenceManager(filename = "../persistenceTest.vmp", namespace = 'myName')
+# 
+# persistenceManager['hello'] = [5,6,7]
+# print persistenceManager['hello']
+# 
+# persistenceManager.set('goodbye', 'wuzzup')
+# print persistenceManager.get('goodbye')
 
-persistenceManager['hello'] = [5,6,7]
-print persistenceManager['hello']
+##----- Function Distributor -----
 
-persistenceManager.set('goodbye', 'wuzzup')
-print persistenceManager.get('goodbye')
+class tester(object):
+    def test(self, arg1, arg2, arg3, arg4 = None, arg5 = None, sync = None):
+        return arg3
+
+test1 = tester()
+test2 = tester()
+test3 = tester()
+print utilities.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', (1,2,3), arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53"))
