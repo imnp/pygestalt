@@ -10,6 +10,7 @@ import imp, os, urllib  #for importing files
 import copy
 from pygestalt import core, packets, utilities, interfaces, config
 from pygestalt.utilities import notice, debugNotice
+import functools
 
 
 #---- GESTALT NODES ----
@@ -1079,17 +1080,34 @@ class compoundNode(object):
         self._nodes_ = nodes
         self._size_ = len(nodes)
         self._name_ = '[' + ''.join([str(node._name_) + ',' for node in self._nodes_])[:-1] + ']'
-        self._commonInterface_ = self._validateInterfaceConsistency_() #stores whether all constituent nodes share a common interface.
-        if not self._commonInterface_: notice(self, 'Warning - Not all members of compound node share a common interface!') #non-blocking warning
+        self._interface_ = self._validateInterfaceConsistency_() #stores the common interface object, or False if none exists.
+        if not self._interface_: notice(self, 'Warning - Not all members of compound node share a common interface!') #non-blocking warning
+    
+    def __getattr__(self, attribute):
+        """Forwards any calls on the compoundNode onto its constituent nodes according to distribution rules.
+        
+        When a call is made on the compound node, it will be passed along to all constituent nodes. If arguments are provided,
+        they will also be forwarded along. Any arguments that are provided as tuples will trigger "unique distribution", meaning
+        that each element of the tuple will be positionally mapped to the constituents in the _nodes_ list.
+        
+        Returns all returned values, or an actionSet object if unique distribution is triggered by tuples in the input arguments
+        and all returned values are either actionObjects or actionSets.
+        """
+        
+        # We use functools.partial, which will return a callable object that wraps core.distributedFunctionCall, but preloads
+        # some key pre-determined arguments that set up how the distribution occurs.
+        return functools.partial(core.distributedFunctionCall(self, self._nodes_, attribute, core.syncToken))
     
     def _validateInterfaceConsistency_(self):
         """Tests whether all constituent nodes share a common interface.
         
-        Returns True if all constituent nodes share a common interface. Otherwise returns False.
+        Returns the interface object if all constituent nodes share a common interface. Otherwise returns False.
         """
         interfaces = [node._interface_ for node in self._nodes_] #a list of all constituent node interfaces
-        return all(interface == interfaces[0] for interface in interfaces) #check that all interfaces are the same
-        
+        if all(interface == interfaces[0] for interface in interfaces): #check that all interfaces are the same
+            return interfaces[0] #return the common interface
+        else:
+            return False #no common interface, return False
     
     
     
