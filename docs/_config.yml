@@ -2,4 +2,6 @@ theme: jekyll-theme-minimal
 description: A control system framework for personal automation.
 title: pyGestalt
 logo: /assets/img/pyGestaltLogo.png
+favicon: /assets/img/pyGestaltLogo.png
 show_downloads: True
+current_version: 0.7.2
