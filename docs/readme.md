@@ -14,3 +14,5 @@ There's likely many ways to skin the cat, but the path I followed to get this up
 	jekyll serve
 	```
 1. Open a browser and go [here](http://localhost:4000)
+
+[Here's a a guide to Markdown.](https://guides.github.com/features/mastering-markdown/)

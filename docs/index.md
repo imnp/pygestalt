@@ -1,6 +1,6 @@
 ## Introduction
 
-We believe that anyone should be able to build their own custom digital fabrication tools. Why? Because our tools shape our perspective, and it's high time we shaped them back. And because the Star Trek Replicator DOES NOT EXIST. [Read our philosophy here.](/pages/philosophy.md)
+We believe that anyone should be able to build their own custom digital fabrication tools. Why? Because our tools shape our perspective, and it's high time we shaped them back. [Read about our philosophy here.](/pages/philosophy)
 
 pyGestalt helps you construct and configure control systems for your own automated machines, ranging from simple to crazy. Just two examples: [a plotter that writes love letters](https://vimeo.com/12068389), and a [Jacquard loom for weaving friendship bracelets](https://vimeo.com/70206561) ([including a web-based control system](http://www.friendshiploom.com)). 
 
@@ -20,3 +20,7 @@ pyGestalt extends this concept of modularity much further; your cakebot might be
 * connect control elements together into complete machine systems
 * work with arrays of machines
 * write browser-based user interfaces
+
+## Getting Started
+- [Philosophy](/pages/philosophy)
+- [Reading List](/pages/readingList)
