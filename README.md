@@ -3,6 +3,8 @@ pygestalt
 
 A control system framework for personal automation.
 
+More documentation here: http://imnp.github.io/pygestalt/
+
 NOTE: This repo is for a new and experimental codebase. If you came here looking for Gestalt, try either:
 
 www.github.com/imoyer/gestalt or www.github.com/nadya/pygestalt 
