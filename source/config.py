@@ -1,5 +1,5 @@
 # pyGestalt Config Module
-"""The config module is used as a storage container to pass global state within a gestalt session."""
+"""The config module is used as a storage container to pass global state within a pyGestalt session."""
 
 
 
@@ -39,6 +39,26 @@ def syntheticMode():
     """
     return getGlobalVariable('syntheticModeFlag')
 
+#automatically download virtual nodes
+def automaticNodeDownload():
+    """Returns the current state of the automaticNodeDownload flag.
+    
+    If automatic node downloads are enabled, pyGestalt will first attempt to download a virtual node from
+    the web address provided by the physical node upon association. If this is unsuccessful, pyGestalt will
+    then attempt to find the virtual node file in the local directory.
+    """
+    return getGlobalVariable('automaticNodeDownload')
+
+def automaticNodeDownloadOn():
+    """Sets the global automaticNodeDownload flag to True."""
+    setGlobalVariable('automaticNodeDownload', True)
+    
+def automaticNodeDownloadOff():
+    """Sets the global automaticNodeDownload flag to False."""
+    setGlobalVariable('automaticNodeDownload', True)
+
+
+
 
 #global verbose debug
 def verboseDebugOn():
@@ -74,5 +94,6 @@ def debugChannelEnabled(debugChannel):
 
 #Global flags
 syntheticModeOff()
+automaticNodeDownloadOff()
 # verboseDebugOn()
 setDebugChannels('units')

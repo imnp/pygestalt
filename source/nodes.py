@@ -195,6 +195,10 @@ class baseGestaltVirtualNode(baseVirtualNode):
         explicitly provided. If no shell is provided it is assumed that the feature-complete virtual node has been directly imported. Keep in mind that the
         present function is part of the base class and will run multiple times.
         
+        IMPORTANT NOTE:     By default, only the local directory will be searched for the virtual node, based on the filename specified in the node's
+                            returned URL. In order to enable automatic download from the web, config.automaticNodeDownloadOn() must be called, usually
+                            from within the virtual machine before the node is declared.
+        
         Returns the new virtual node if the node has successfully been replaced, or False if not.
         """ 
         #run some basic checks first
@@ -206,8 +210,11 @@ class baseGestaltVirtualNode(baseVirtualNode):
 
         nodeURL = self.urlRequest() #get node URL
         
-        return self._shell_._loadNodeFromURL_(nodeURL, args, kwargs)
-
+        if config.automaticNodeDownload(): #automatic node downloads are enabled
+            return self._shell_._loadNodeFromURL_(nodeURL, args, kwargs) #load from URL
+        else: #load from local file
+            vnFilename = os.path.basename(URL) #get filename based on URL
+            return self._loadNodeFromFile_(vnFilename, args, kwargs) #load from file
 
     def bindPort(self, port, outboundFunction = None, outboundTemplate = None, inboundFunction = None, inboundTemplate = None ):
         """Attaches actionObject classes and templates to a communication port, and initializes relevant parameters.
