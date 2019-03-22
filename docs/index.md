@@ -22,5 +22,6 @@ pyGestalt extends this concept of modularity much further; your cakebot might be
 * write browser-based user interfaces
 
 ## Getting Started
+- [Tutorials](pages/tutorials.md)
 - [Philosophy](pages/philosophy.md)
 - [Reading List](pages/readinglist.md)
