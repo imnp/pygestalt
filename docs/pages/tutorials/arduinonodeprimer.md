@@ -17,7 +17,7 @@ We're going to start with a few basic examples that touch on various aspects of 
 - Install / register the Gestalt firmware library with your Ardunio IDE.
 
 ### Part 1: Blink an LED -- Quick-Start
-_We're going to show you how to write your own custom nodes on both the firmware and Python sides. But first, we'd like to give you the chance to jump to the end and use our pre-written example code to get a flavor of the end goal. This will also help you make sure you have all of the elements configured correctly, including the Arduino IDE, your Python environment, and the pyGestalt library.
+_We're going to show you how to write your own custom nodes on both the firmware and Python sides. But first, we'd like to give you the chance to jump to the end and use our pre-written example code to get a flavor of the end goal. This will also help you make sure you have all of the elements configured correctly, including the Arduino IDE, your Python environment, and the pyGestalt library._
 
 
 ### Part 2: Blink an LED -- Writing the Firmware
@@ -152,3 +152,108 @@ void svcControlLED(){
 
 _And that's it for the physical node firmware! Continue on to learn how to write the virtual node._
  
+### Part 3: Blink an LED -- Writing the Virtual Node
+_Here we will show you how to write a corresponding Python module -- what we call the *virtual node* -- that can be imported into your Python scripts in order to directly control the physical node. We will follow a similar format to writing the physical node firmware; each relevant section of the code will be handled individually. By the end, you'll have a complete end-to-end control system for turning on and off an LED._
+
+#### 3.1 Fire up a Python code editor
+Create a new Python file in your favorite text editor. We use Eclipse (so passe, we know!), but you could use really anything. Sublime Text is also quite nice and does helpful syntax highlighting. You'll need to name the file "arduino_basicNode.py" so that it matches the filename specified in the physical node's URL (or adjust per Section 2.3 above to your own taste).
+
+#### 3.2 Imports Section
+The only modules you need to import are a couple pyGestalt sub-modules.
+{% highlight python %}
+#---- IMPORTS -----
+from pygestalt import nodes
+from pygestalt import core
+from pygestalt import packets
+{% endhighlight %}
+- _pygestalt.nodes_ gives you access to the pyGestalt virtual node base classes
+- _pygestalt.core_ provides access to the actionObject class for creating service routines
+- _pygestalt.packets_ for access to the packet templates and encoding types
+
+#### 3.3 _virtualNode_ Class
+All of the code for your virtual node should live inside a _virtualNode_ class.
+{% highlight python %}
+class virtualNode(nodes.arduinoGestaltVirtualNode):
+	"""The arduino_basicNode virtual node."""
+{% endhighlight %}
+- the class **must** be called "virtualNode" in order for consistency, and for it to be automatically imported correctly within the context of a virtual machine.
+- The base class of this particular node should be _nodes.arduinoGestaltVirtualNode_. This takes care of a lot of configuration for you, including setting the correct commnications baud rate.
+
+#### 3.4 _init_ Function
+The virtual node base class overrides the standard _\_\_init\_\__() function, and instead provides _init()_. This is called when the virtual node is first initialized, and gets passed any (non-reserved) arguments provided on initialization of the virtual node. This is a good place to define any parameters relevant to the specific node.
+{% highlight python %}
+    def init(self, *args, **kwargs):
+        """Initialiation method for the virtual node instance."""
+        self.crystalFrequency = 16000000    #MHz
+        self.ADCReferenceVoltage = 5.0  #Volts
+{% endhighlight %}
+
+The above are just examples of parameters you might typically put in the init() function, although are not immediately relevant to the LED control example. If you don't want to put anything in _init()_, simply don't declare it, or make this the first and only line in the function:
+{% highlight python %}
+    def init(self, *args, **kwargs):
+        """Initialiation method for the virtual node instance."""
+        pass
+{% endhighlight %}
+
+#### 3.5 _initPackets_ Function
+As a communications framework, one of the primary tasks of pyGestalt is to make it easier to pass various data types back and forth between the virtual node and the firmware running on the physical node. Data is transmitted via _packets_, which are sequences of bytes that follow a specific format. Gestalt packets contain a fixed number of framing bytes, and then a variable number of _payload_ bytes. The _packets_ sub-module helps you define and encode these packet payloads with a rich set of data types. For the purposes of our example, we'll define a simple packet for transmitting an on/off control signal to the Arduino via a single data byte.
+{% highlight python %}
+    def initPackets(self):
+        """Initialize packet types."""
+        self.LEDControlRequestPacket = packets.template('LEDControlRequest',
+                                                           packets.unsignedInt('command',1))
+{% endhighlight %}
+The packet template is defined with several arguments:
+- A name for the template, used for logging and reporting errors
+- An unlimited number of additional arguments, each containing _packetTokens_ from the pygestalt.packets submodule. The sequence of these tokens defines how they are ordered in the packet payload. Each token has a mandatory name - used to reference the token inside the packet - and any additional parameters needed to set up the token. In our example, we're transmitting a single unsigned value to the physical node, encoded within one byte of payload data.
+
+#### 3.6 _initPorts_ Function
+In order for service routine functions in the virtual node to communicate with the service routines on physical node, they must both have a commonly shared identifier (referred to in pyGestalt as a port), and a common understanding of how transmitted information is encoded. self.bindPort() "binds" virtual node service routines to port numbers, and then associated them with the packet templates that are used to encode and decode transmitted communication packets. With these associations in place, pyGestalt is able to automatically assist in shuttling messages in the correct format between virtual and physical nodes.
+
+{% highlight python %}
+    def initPorts(self):
+        """Bind functions to ports and associate with packets."""
+        self.bindPort(port = 10, outboundFunction = self.LEDControlRequest, outboundTemplate = self.LEDControlRequestPacket)
+{% endhighlight %}
+- _self.bindPort_ is an internal function of the _virtualNode_ base class
+- the _port_ argument specifies a port number. This must match the associated port number provided to _userPacketRouter_ in the physical node firmware.
+- _outboundFunction_ is the virtual node service routine responsible for controlling the LED. We haven't written this yet, but will be doing so in a few steps.
+- _outboundTemplate_ is the packet template - defined in the prior section - that is responsible for encoding the message to the physical node.
+- Note that we don't specify an inbound template, because the response from the physical node is an "empty" acknowledgement containing no payload data.
+
+#### 3.7 Public User Functions
+This is the section where we write functions that are explicitly intended for the user to call. These are useful in situations like our LED demo, where the user might want to simply call ledOn() or ledOff(), rather than calling the service routine that actually transmits the command to the physical node. (If this doesn't make sense yet, read ahead to the next section). Note that these functions should be indented so that they are at the same level as all of the init functions we just wrote.
+
+{% highlight python %}
+    def ledOn(self):
+        """Turns on the LED on the physical node."""
+        return self.LEDControlRequest(True) #simply calls the virtual node service routine with a True (meaning "on") argument
+    
+    def ledOff(self):
+        """Turns off the LED on the physical node."""
+        return self.LEDControlRequest(False) #calls the virtual node service routine with a False (meaning "off") argument
+{% endhighlight %}
+
+#### 3.8 Service Routines
+Virtual node service routines are functions that are responsible for communicating with complementary service routines on the physical node. These special functions are actually children of the actionObject base class. We won't go into all of the details here, but pyGestalt follows a pattern where calls to service routines do not simply generate encoded packets. Rather, an actionObject is generated and preserved until the very moment before transmission, at which point it spits out an encoded packet. The short reason for this is that for more complicated controls applications, such as those requiring motion planning, the final output of the function might change well after it is first called.
+{% highlight python %}
+    class LEDControlRequest(core.actionObject):
+        """Controls the state of the node's indicator LED."""
+        def init(self, ledState):
+            """Initializes the actionObject.
+            
+            ledState -- a boolean value, where True will turn on the LED, and False will turn it off.
+
+            Returns True if a confirmation packet was received, or False if not.
+            """
+            if ledState:
+                self.setPacket(command = 1)
+            else:
+                self.setPacket(command = 0)
+                            
+            if self.transmitUntilResponse(): #Transmits multiple times if necessary until a reply is received from the node.
+                return True #A response was received, so indicate the command was executed by returning True.
+            else: #No response was received, in spite of multiple attempts.
+                notice(self.virtualNode, 'got no respone to LED control request') #generate a notice to the user.
+                return False
+{% endhighlight %}
