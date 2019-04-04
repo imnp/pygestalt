@@ -3,10 +3,9 @@
 ### Introduction
 In this tutorial, we will walk you step-by-step through the process of creating an Arduino-based _physical node_ and a complementary Python-based _virtual node_. By the end of the tutorial, you will be able to write firmware for your own custom nodes, and then import and interact with them from any Python program.
 
-We're going to start with a few basic examples that touch on various aspects of the framework: 
+We're going to start with two basic examples that touch on various aspects of the framework: 
 1. Turn on and off the built-in LED from a Python program. 
-2. Blink the LED a certain number of times, and cause the Python program to wait until complete.
-3. Do some arithmatic on the Arduino, and return the result.
+1. Do some arithmatic on the Arduino, and return the result.
 
 
 ### Materials
@@ -19,6 +18,54 @@ We're going to start with a few basic examples that touch on various aspects of 
 ### Part 1: Blink an LED -- Quick-Start
 _We're going to show you how to write your own custom nodes on both the firmware and Python sides. But first, we'd like to give you the chance to jump to the end and use our pre-written example code to get a flavor of the end goal. This will also help you make sure you have all of the elements configured correctly, including the Arduino IDE, your Python environment, and the pyGestalt library._
 
+#### 1.1 Navigate to the Arduino example code
+All of the code for this example is located in pygestalt/examples/arduino_basicNode/ .
+
+#### 1.2 Load the Arduino sketch onto your Arduino.
+1. Open up the _arduino_basicNode.ino_ file in your Arduino IDE.
+2. Plug in your Arduino.
+3. Click the "Upload" button to compile and load the firmware onto the Arduino.
+_Note: If the code fails to compile, be sure that you have the Gestalt firmware library registered with the Arduino environment._
+
+#### 1.3 Control the LED!
+_We are going to show you how to do this using the Terminal. However, you can also create a new python script using the exact same commands, with the same effect._
+1. Launch a terminal window.
+1. Navigate to the example directory (which contains _arduino_basicNode.py_). On my computer, it looks like this:
+ ```bash
+ >> cd pyGestalt/examples/arduino_basicNode/
+ ```
+1. Start up the Python interpreter. This puts you into an interactive Python environment.
+ ```bash
+ >> python
+ >>>
+ ```
+1. Import the arduino virtual node module. We'll use **_import as_** syntax to make the name simpler to work with.
+ ```python
+ >>> import arduino_basicNode as arduino
+ ```
+1. Create an instance of the virtual node.
+ ```python
+ >>> myArduino = arduino.virtualNode()
+ ```
+ Python will think for a few moments and then display something like this:
+ ```
+ [tty.usbmodem1411] Successfully connected to port /dev/tty.usbmodem1411
+ >>>
+ ```
+ We've now connected to the Arduino over a USB -> serial connection, performed a handshake, and are ready to start issuing commands.
+1. Turn the LED on!
+ ```python
+ >>> myArduino.ledOn()
+ ```
+ With any luck, the LED should immediately turn on.
+
+1. Turn the LED off!
+ ```python
+ >>> myArduino.ledOff()
+ ```
+ And it turns off. Note that _True_ will display after each command is run. This is the value returned by the virtual node, to indicate that the physical node has confirmed the requested action was completed successfully.
+
+Now that you've gotten a flavor of how easy it is to import external hardware and start controlling it from within Python, we're ready to walk step-by-step through the underlying code for the physical and virtual nodes. 
 
 ### Part 2: Blink an LED -- Writing the Firmware
 #### 2.1 Fire up the Arduino IDE
@@ -262,4 +309,4 @@ Service routines are functions that are responsible for communicating with compl
 - The following several lines are responsible for "setting" the outgoing packet, meaning configuring the parameters of the packet before it is encoded. In our packet definition in 3.5, we defined the entire packet payload as just one single-byte unsigned integer called _command_. Now, we are setting the value of _command_. If the user wants to turn on the LED (a _True_ argument to the service routine), the value of _command_ should be "1". Otherwise, "0".
 - Lastly, we call the internal helper function _self.transmitUntilResponse()_. This function not only transmits the encoded packet to the physical node, but it waits for a reply (and even re-transmits several times if necessary). If a response is eventually received, the function returns True. If, after numerous attempts, no return packet is received, _self.transmitUntilResponse()_ returns _False_.
 
-_At this point, you have written both the Arduino firmware living on the physical node, and also the pyGestalt virtual node. So now, please jump back to Part 1 and take your code for a spin! Or, continue to Part 4 where we ..._
+_At this point, you have written both the Arduino firmware living on the physical node, and also the pyGestalt virtual node. So now, please jump back to Part 1 and take your code for a spin! [Or, continue to Part 4 where we teach you how to transmit data back from the physical node](arduinonodeprimer-4.md)._
