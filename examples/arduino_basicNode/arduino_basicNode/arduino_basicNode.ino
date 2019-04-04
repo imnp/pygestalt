@@ -12,7 +12,8 @@ char myurl[] = "http://www.fabunit.com/vn/examples/arduino_basicNode.py"; //URL 
 // Once a packet has been received by the node, it is directed to a specific service routine handler. A port number
 // is used to associate the packet with its handler. Ports 0 -> 9 and 255 are reserved by the gestalt firmware library,
 // but you are free to use any other port.
-#define LEDControlPort    10 
+#define LEDControlPort    10
+#define sumPort			  11
 
 //---- IO DEFINITIONS ----
 // Here's where you define all of your inputs and outputs.
@@ -65,7 +66,21 @@ void svcControlLED(){
 	
 	transmitUnicastPacket(LEDControlPort, 0); //transmit an empty (0 payload bytes) unicast packet to the LEDControlPort
 };
-	
+
+void svcSumNumbers(){
+	// Sums two numbers and returns the result.
+	int16_t value1 = (int16_t)((uint16_t)rxBuffer[payloadLocation] + 
+					          (((uint16_t)rxBuffer[payloadLocation+1])<<8)); //read in value1 from rxBuffer
+	int16_t value2 = (int16_t)((uint16_t)rxBuffer[payloadLocation+2] + 
+					          (((uint16_t)rxBuffer[payloadLocation+3])<<8)); //read in value2 from rxBuffer
+  
+	int16_t result = value1 + value2; //sum inputs
+  
+	txBuffer[payloadLocation] = (uint8_t)(result & 0x00FF); //write out result
+	txBuffer[payloadLocation+1] = (uint8_t)((result & 0xFF00)>>8);
+
+	transmitUnicastPacket(sumPort, 2); //transmit the result as a unicast packet
+};
 
 //---- USER PACKET ROUTER ----
 void userPacketRouter(uint8_t destinationPort){
@@ -75,6 +90,10 @@ void userPacketRouter(uint8_t destinationPort){
   switch(destinationPort){
     case LEDControlPort: //a message was sent to the LED port
       svcControlLED(); //call the LED control service routine
+      break;
+    
+    case sumPort: //a message was sent to the sum port
+      svcSumNumbers(); //call the number addition service routine
       break;
     // add additional case statements for new ports here, following the pattern immediately above.
   }

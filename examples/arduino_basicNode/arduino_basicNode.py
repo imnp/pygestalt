@@ -37,6 +37,16 @@ class virtualNode(nodes.arduinoGestaltVirtualNode):
         # You can find all of the avaliable types in the packets sub-module.
         self.LEDControlRequestPacket = packets.template('LEDControlRequest',
                                                            packets.unsignedInt('command',1)) #(type name, number of encoded bytes)
+        
+        # The following packets are used for a bi-directional communication example, in which the Arduino will add two values and
+        # return the results. We'll add a twist: the values will be treated as fixed-point numbers, with a maximum value of 32 (2^5)
+        # and 10 fractional bits.
+        self.additionRequestPacket = packets.template('additionRequest',
+                                                            packets.fixedPoint('input1', 6, 10),
+                                                            packets.fixedPoint('input2', 6, 10)) #5 integer bits + sign, 10 fractional
+        
+        self.additionResponsePacket = packets.template('additionResponse',
+                                                            packets.fixedPoint('result', 6, 10))
     
     def initPorts(self):
         """Bind functions to ports and associate with packets."""
@@ -49,6 +59,8 @@ class virtualNode(nodes.arduinoGestaltVirtualNode):
         # Note that if an inbound packet template is not specified in the bindPort() call, any inbound packets received on the port 
         # will be assumed to contain no payload.
         self.bindPort(port = 10, outboundFunction = self.LEDControlRequest, outboundTemplate = self.LEDControlRequestPacket)
+        self.bindPort(port = 11, outboundFunction = self.sumNumbers, outboundTemplate = self.additionRequestPacket,
+                      inboundTemplate = self.additionResponsePacket)
     
     
     # ---- PUBLIC USER FUNCTIONS ----
@@ -90,6 +102,25 @@ class virtualNode(nodes.arduinoGestaltVirtualNode):
             if self.transmitUntilResponse(): #Transmits multiple times if necessary until a reply is received from the node.
                 return True #A response was received, so indicate the command was executed by returning True.
             else: #No response was received, in spite of multiple attempts.
-                notice(self.virtualNode, 'got no respone to LED control request') #generate a notice to the user.
+                notice(self.virtualNode, 'got no response to LED control request') #generate a notice to the user.
                 return False
-        
+    
+    class sumNumbers(core.actionObject):
+        """Remotely sums two numbers and returns the result."""
+        def init(self, value1, value2):
+            """Initializes the actionObject.
+            
+            value1 -- the first number to be added
+            value2 -- the second number to be added
+            
+            Returns value1 + value2
+            """
+            self.setPacket(input1 = value1, input2 = value2)
+            
+            if self.transmitUntilResponse(): #Transmits multiple times if necessary until a reply is received from the node.
+                result = self.getPacket()['result'] #retrieves the result from the response packet
+                return result #return the result
+            else:#didn't receive a response from the node
+                notice(self.virtualNode, 'got no response to addition request') #generate a notice to the user.
+                return False
+                
