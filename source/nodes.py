@@ -497,7 +497,7 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
         #write hex file to node
         for page in pages:
             pageData = [addressBytePair[1] for addressBytePair in page]
-            pageNumber = self.bootWriteRequest(0, pageData)    #send page to bootloader
+            pageNumber = self.bootWriteRequest(page[0][0], pageData)    #send page to bootloader
             if pageNumber != page[0][0]:
                 notice(self, "Error in Bootloader: PAGE MISMATCH: SENT PAGE " + str(page[0][0]) + " AND NODE REPORTED PAGE " + str(pageNumber))
                 notice(self, "ABORTING PROGRAM LOAD")
