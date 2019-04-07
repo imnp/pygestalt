@@ -4,6 +4,8 @@
 # Ilan Moyer and Nadya Peek
 # www.pygestalt.org
 
+## --- KEY PARAMETERS ---
+
 # --- NAME OF MAIN C++ PROJECT ---
 # Do not include extension, as assumes .cpp
 PROJECT = projectName
@@ -46,10 +48,10 @@ GESTALT_DEFS = -DstandardGestalt -DnetworkedGestalt -Dgestalt328
 
 
 # --- ABSOLUTE PATH OF gestalt.cpp LIBRARY ---
-GESTALT_DIR = /Users/imoyer/gsArduino
+GESTALT_DIR = /users/imoyer/gsArduino
 
 
-#----INNER WORKINGS BEGIN HERE----
+## --- COLLATE BUILD OPTION STRINGS ---
 GESTALT_FILE = $(GESTALT_DIR)/gestalt.cpp
 LDSECTION = --section-start=.text=$(ADDRESS)
 SOURCES = $(PROJECT).cpp $(GESTALT_FILE)
@@ -57,25 +59,35 @@ SOURCES = $(PROJECT).cpp $(GESTALT_FILE)
 CFLAGS = -g -Wall -Os -mmcu=$(MCU) -DF_CPU=$(FREQ) -I$(GESTALT_DIR) $(GESTALT_DEFS)
 LDFLAGS = -Wl,$(LDSECTION)
 
-# Build only:
+## --- DEFAULT BEHAVIOR WHEN CALLING MAKE ---
+# Build and clean:
 all: $(PROJECT).hex clean
 
-# Build and load onto microcontroller
-load: $(PROJECT).hex flash clean
-
+## --- INTERNAL BUILD PROCESS ---
+#Build object files from source
 $(PROJECT).o: $(SOURCES)
 	avr-g++ $(CFLAGS) -c -Wall $(SOURCES)
 
+#build executable and linker file from object files
 $(PROJECT).elf: $(PROJECT).o
 	avr-g++ $(CFLAGS) $(LDFLAGS) gestalt.o -o $@ $^
 
+#Convert linker file into hex file
 $(PROJECT).hex: $(PROJECT).elf
 	avr-objcopy -j .text -j .data -O ihex $< $@
 
+## --- ADDITIONAL COMMAND LINE OPTIONS ---
+# Remove all intermediate files
+clean:
+	rm -rf *.o *.elf
+
+# Remove all built files
+clean-all:
+	rm -rf *.o *.elf $(PROJECT).hex	
+	
 # Flash using the Universal Personality Programmer (UPP)
 flash:
 	python UPPloader.py $(PROJECT).hex
-
-# Remove all unnecessary intermediate files
-clean:
-	rm -rf *.o *.elf $(PROJECT).hex
+	
+# Build and load onto microcontroller
+load: $(PROJECT).hex flash clean
