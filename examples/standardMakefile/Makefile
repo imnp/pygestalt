@@ -90,4 +90,8 @@ flash:
 	python UPPloader.py $(PROJECT).hex
 	
 # Build and load onto microcontroller
+# Note that this is typically only used when flashing the bootloader onto the
+# microcontroller, as application code can be loaded directly from the virtual node 
+# via the bootloader.
+
 load: $(PROJECT).hex flash clean

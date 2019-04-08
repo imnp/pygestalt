@@ -2,7 +2,7 @@
 
 _Makefiles_ are necessary in order to compile firmware into a .hex file that can be loaded onto the physical node's microcontroller. Makefiles are essentially a recipe instructing the compiler how to build a .hex file from an input C++ file.
 
-We have created a "standard" makefile that can be used to compile your Gestalt code. Because makefiles are inherently confusing, we'll step you thru our [standard makefile](https://github.com/imnp/pygestalt/tree/master/firmware/makefile) here.
+We have created a "standard" makefile that can be used to compile your Gestalt code. Because makefiles are inherently confusing, we'll step you thru our [standard makefile](https://github.com/imnp/pygestalt/tree/master/examples/standardMakefile) here.
 
 ### Key Parameters
 The makefile is divided into roughly three sections. The first is where you will define a bunch of parameters that control how your code is compiled.
@@ -176,3 +176,5 @@ In the terminal:
 ```bash
 >> make load
 ```
+
+It is worth noting that typically we only use this command when flashing a Gestalt bootloader onto a fresh microcontroller. Application code can be more easily loaded onto the MCU via the virtual node bootloader functions.
