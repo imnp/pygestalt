@@ -812,8 +812,15 @@ class networkedGestaltVirtualNode(gestaltVirtualNode):
     This has implications for how the node associates with its virtual node counterpart, and in particular means that a message with the node
     name should be displayed on association, to notify the user that they need to press a button.
     """
-    pass
-
+    
+    def init(self, *args, **kwargs):
+        #If no interface was provided, assign a default serial interface
+        if self._interface_ == None: #no interface was provided, create a new serial interface
+            if 'port' in kwargs:    #a port path was provided, use that
+                portPath = kwargs['port']
+            else:
+                portPath = None
+            self.setDefaultInterface(interfaces.serialInterface(port = portPath)) #baud rate defaults to 115200 as specified in interfaces.serialInterface
 
 #---- NODE SHELLS ----
  
