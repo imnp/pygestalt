@@ -5,13 +5,13 @@ from pygestalt import nodes, config
 import time
 
 # ---- SYNTHETIC MODE ----
-config.syntheticModeOn() #Un-comment this line to run in synthetic mode (i.e. test mode)
-config.verboseDebugOn()
-config.setDebugChannels()
+# config.syntheticModeOn() #Un-comment this line to run in synthetic mode (i.e. test mode)
+# config.verboseDebugOn()
+# config.setDebugChannels()
 
 # ---- DEFINE TEST NODE ----
-testNode = nodes.arduinoGestaltNode(name = "Comm. Test Node", filename = "arduinoNode_commTest.py") #filename must be provided for synthetic mode
-# testNode = nodes.networkedGestaltNode(name = "Comm. Test Node", filename = "gestaltNode_commTest.py") #filename must be provided for synthetic mode
+# testNode = nodes.arduinoGestaltNode(name = "Comm. Test Node", filename = "arduinoNode_commTest.py") #filename must be provided for synthetic mode
+testNode = nodes.networkedGestaltNode(name = "Comm. Test Node", filename = "gestaltNode_commTest.py") #filename must be provided for synthetic mode
 
 # ---- TEST FUNCTIONS ----
 def exchange(outboundPayloadLength, inboundPayloadLength, numExchanges = 1, verbose = False):
@@ -57,7 +57,7 @@ def printResult(sweepResult):
         print "  " + str(payloadSize) + " PAYLOAD BYTES: " + str(exchangeRate) + " ROUND-TRIP PACKETS PER SEC."
     
 # ---- LOAD NEW FIRMWARE ----
-# testNode.loadProgram('firmware/gestaltNode_commTest/gestaltNode_commTest.hex')
+testNode.loadProgram('firmware/gestaltNode_commTest/gestaltNode_commTest.hex')
 
 # ---- RUN TEST ----
-printResult(symmetricPayloadSizeSweep(0,3, 100, verbose = True))
+# printResult(symmetricPayloadSizeSweep(0,3, 100, verbose = True))

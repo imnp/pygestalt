@@ -28,6 +28,30 @@ uint8_t basePacketLength = 5;
 //USER SETUP
 void userSetup(){
   setURL(&myurl[0], sizeof(myurl));
+
+  // -- NETWORKED GESTALT PIN CONFIGURATIONS --
+  // LED for associating virtual and physical nodes
+  IO_ledPORT = &PORTB;
+  IO_ledDDR = &DDRB;
+  IO_ledPIN = &PINB;
+  IO_ledPin = 1<<3; //PB3
+
+  // button for associating virtual and physical nodes
+  IO_buttonPORT = &PORTB;
+  IO_buttonDDR = &DDRB;
+  IO_buttonPIN = &PINB;
+  IO_buttonPin = 1<<2; //PB2
+
+  // UART transmit and receive pins
+  IO_txrxPORT = &PORTD;
+  IO_txrxDDR = &DDRD;
+  IO_rxPin = 1<<0; //PD0
+  IO_txPin = 1<<1; //PD1
+
+  // RS-485 driver enable pin
+  IO_txEnablePORT = &PORTD;
+  IO_txEnableDDR = &DDRD;
+  IO_txEnablePin = 1<<2; //PD2
 }
 
 void userLoop(){
