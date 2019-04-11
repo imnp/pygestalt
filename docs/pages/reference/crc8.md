@@ -1,6 +1,6 @@
 ## CRC-8 Checksum Algorithm
 
-Checksums are a useful technique for verifying that a sequence of bytes has been received exactly as it was transmitted. Gestalt uses a simple 8-bit checksum, generated using the CRC-8 algorithm. 
+Checksums are a useful technique for verifying that a sequence of bytes has been received exactly as it was transmitted. pyGestalt uses a simple 8-bit checksum, generated using the CRC-8 algorithm. 
 
 The first step of this algorithm is to pre-generate a 256-byte lookup table. This allows us to minimize the number of cycles required to generate or validate the CRC in the tranceiver interrupt routines, which is important so as not to bog down the microcontroller.
 
@@ -54,6 +54,7 @@ The resultant CRC value is 114, and the entire packet (with the CRC appended) wo
 
 ```
 packet = [72, 26, 106, 10, 8, 3, 3, 3, 114]
+```
 
 ### Validating the Packet
 The process for validating the packet is actually identical. You feed the packet thru the same algorithm:
