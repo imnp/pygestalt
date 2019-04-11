@@ -2,16 +2,19 @@
 
 # ---- IMPORTS ----
 from pygestalt import nodes, config
-import time
+import time #for clocking data exchange rate
+import csv #for outputting data
+
 
 # ---- SYNTHETIC MODE ----
 # config.syntheticModeOn() #Un-comment this line to run in synthetic mode (i.e. test mode)
-# config.verboseDebugOn()
-# config.setDebugChannels()
 
 # ---- DEFINE TEST NODE ----
-# testNode = nodes.arduinoGestaltNode(name = "Comm. Test Node", filename = "arduinoNode_commTest.py") #filename must be provided for synthetic mode
-testNode = nodes.networkedGestaltNode(name = "Comm. Test Node", filename = "gestaltNode_commTest.py") #filename must be provided for synthetic mode
+testNode = nodes.arduinoGestaltNode(name = "Comm. Test Node", filename = "arduinoNode_commTest.py") #filename must be provided for synthetic mode
+# testNode = nodes.networkedGestaltNode(name = "Comm. Test Node", filename = "gestaltNode_commTest.py") #filename must be provided for synthetic mode
+
+# ---- GLOBAL DEFINITIONS ----
+basePacketLength = 6 #length of packet frame
 
 # ---- TEST FUNCTIONS ----
 def exchange(outboundPayloadLength, inboundPayloadLength, numExchanges = 1, verbose = False):
@@ -51,13 +54,29 @@ def symmetricPayloadSizeSweep(startSize, endSize, numExchanges, verbose = False)
     return [(payloadSize, round(1.0 / exchange(payloadSize, payloadSize, numExchanges, verbose),1)) for payloadSize in range(startSize, endSize + 1)]
     
 def printResult(sweepResult):
+    """Prints the results to the terminal."""
     print " "
     print "PAYLOAD SWEEP RESULTS:"
     for payloadSize, exchangeRate in sweepResult:
         print "  " + str(payloadSize) + " PAYLOAD BYTES: " + str(exchangeRate) + " ROUND-TRIP PACKETS PER SEC."
+
+def outputResult(sweepResult, filename = 'commTestResults.csv'):
+    """Outputs the results to a CSV file.
+    
+    sweepResult -- the results of the sweep, in the format [(payloadSize, exchangeRate), ...]
+    filename -- the name of the file to which the results should be saved.
+    """
+    outputFile = open(filename, 'wb')
+    csvWriter = csv.writer(outputFile)
+    csvWriter.writerow(["Payload Size", "Total Packet Size", "Round-Trip Rate (exchanges/sec)"]) #write header
+    for payloadSize, exchangeRate in sweepResult:
+        csvWriter.writerow([payloadSize, payloadSize + basePacketLength, exchangeRate])
+    outputFile.close()
     
 # ---- LOAD NEW FIRMWARE ----
-testNode.loadProgram('firmware/gestaltNode_commTest/gestaltNode_commTest.hex')
+# testNode.loadProgram('firmware/gestaltNode_commTest/gestaltNode_commTest.hex')
 
 # ---- RUN TEST ----
-# printResult(symmetricPayloadSizeSweep(0,3, 100, verbose = True))
+sweepResults = symmetricPayloadSizeSweep(0,200, 100, verbose = True)
+printResult(sweepResults)
+outputResult(sweepResults)

@@ -1,0 +1,6 @@
+# pygestalt, a control system framework for personal automation
+# .gitignore file
+# created 9/23/15
+# Ilan E. Moyer
+
+*.csv

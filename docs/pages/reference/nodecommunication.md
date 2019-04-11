@@ -41,3 +41,19 @@ Gestalt nodes typically communicate over a asynchronous serial connection, often
 
 The standard baud rates above were based on the clock frequency of the microcontroller. Custom Gestalt nodes use a 18.432Mhz crystal, which was selected to have zero rate error at 115.2kbps (and all standard baud rates). Because Arduinos rely on a 16Mhz crystal, communication speeds are limited by the rate error. A non-standard speed of 76.8kbps would have been ideal, but is unsupported in Linux. Therefore, we use a standard baud rate of 38.4 kbps. This has a rate error of 0.2%.
 
+#### Typical Packet Exchange Rates
+Packet throughput is limited not only by the communication baud-rate, but also internal delays in the USB-> serial device driver, the operating system, and within the pyGestalt framework. We measured the actual round-trip packet exchange rate, measured in packets per second, for several types of nodes. [You can see the full results here \(including how to run the tests yourself\)](packetrates.md), or the summaries below. The pyGestalt framework itself is currently able to process 385 round-trip packets per second as an upper limit to overall system throughput.
+
+Arduino Uno Node, pyGestalt running on Mac OSX:
+
+|Payload (Bytes)  |0 |5 |15|20|25|45|55|115|200|
+|-----------------|--|--|--|--|--|--|--|---|--|
+|Packets per sec. |93|63|55|35|29|28|16|10 |8 |
+|-----------------|--|--|--|--|--|--|--|---|--|
+
+Networked Gestalt Node, pyGestalt running on Mac OSX:
+
+|Payload (Bytes)  |0-15 |20|25|30|40|85|100|150 |200|
+|-----------------|-----|--|--|--|--|--|--|-----|--|
+|Packets per sec. |63   |52|44|41|37|28|19|14   |14|
+|-----------------|-----|--|--|--|--|--|--|-----|--|
