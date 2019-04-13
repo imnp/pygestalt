@@ -8,4 +8,6 @@
 
 ### Everything Else
 - [Gestural Design - Ilan Moyer - 2013](http://www.gesturaldesign.com/GesturalDesign2013.pdf)
+- Forces of Production - David Noble - 1984
+- Tools for Conviviality - Ivan Illich - 1973
 
