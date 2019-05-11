@@ -13,7 +13,8 @@ We're going to start with two basic examples that touch on various aspects of th
 - USB A to B cable
 
 ### Prerequisites
-- Install / register the Gestalt firmware library with your Ardunio IDE.
+- Install PyGestalt
+- Install / register the Gestalt firmware library with your Ardunio IDE. You can check [Arduino's Library Installation Instructions](https://www.arduino.cc/en/Guide/Libraries) for instructions, but an easy way to do this is to copy the gestalt.h and gestalt.cpp files from the 'firmware' folder into a folder you name 'Gestalt' your Arduino libraries folder (e.g. ~/yourarduinosketchbook/libraries/Gestalt/)
 
 ### Part 1: Blink an LED -- Quick-Start
 _We're going to show you how to write your own custom nodes on both the firmware and Python sides. But first, we'd like to give you the chance to jump to the end and use our pre-written example code to get a flavor of the end goal. This will also help you make sure you have all of the elements configured correctly, including the Arduino IDE, your Python environment, and the pyGestalt library._
