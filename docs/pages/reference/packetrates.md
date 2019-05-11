@@ -81,7 +81,7 @@ This test is measuring _round trip_ packet rates, meaning the time it takes from
 In order to help filter out random system noise, 100 round-trip packets were exchanged at each payload length. An average rate was calculated by dividing 100 by the total time required to complete. Note that there are six bytes of overhead in each packet, so the total packet length is the payload length + 6.
 
 
-![Arduino Uno Node Packet Rates](../../assets/img/packet_rates/arduinouno_macosx_packetrate.svg)
+![Arduino Uno Node Packet Rates](../../assets/img/packet_rates/arduinouno_packetrate.svg)
 ![Networked Gestalt Node Packet Rates](../../assets/img/packet_rates/networkednode_macosx_packetrate.svg)
 ![Synthetic Node Packet Rates](../../assets/img/packet_rates/syntheticnode_macosx_packetrate.svg)
 
