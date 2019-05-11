@@ -153,7 +153,7 @@ a small { font-size: 11px; color: #777; margin-top: -0.3em; display: block; }
 
 a:hover small { color: #777; }
 
-.wrapper { width: 1360px; margin: 0 auto; }
+.wrapper { width: 1260px; margin: 0 auto; }
 
 blockquote { border-left: 1px solid #e5e5e5; margin: 0; padding: 0 0 0 20px; font-style: italic; }
 
@@ -193,7 +193,7 @@ header ul.downloads li + li + li { border-right: none; width: 89px; }
 
 header ul.downloads a strong { font-size: 14px; display: block; color: #222; }
 
-section { width: 1000px; float: right; padding-bottom: 50px; }
+section { width: 900px; float: right; padding-bottom: 50px; }
 
 small { font-size: 11px; }
 
@@ -201,7 +201,7 @@ hr { border: 0; background: #e5e5e5; height: 1px; margin: 0 0 20px; }
 
 footer { width: 270px; float: left; position: fixed; bottom: 50px; -webkit-font-smoothing: subpixel-antialiased; }
 
-@media print, screen and (max-width: 960px) { div.wrapper { width: auto; margin: 0; }
+@media print, screen and (max-width: 1260px) { div.wrapper { width: auto; margin: 0; }
   header, section, footer { float: none; position: static; width: auto; }
   header { padding-right: 320px; }
   section { border: 1px solid #e5e5e5; border-width: 1px 0; padding: 20px 0; margin: 0 0 20px; }
