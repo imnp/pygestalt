@@ -123,10 +123,11 @@ $(PROJECT).elf: $(PROJECT).o
 	avr-g++ $(CFLAGS) $(LDFLAGS) gestalt.o -o $@ $^
 ```
 
-Converts the ELF file into a hex file:
+Converts the ELF file into a hex file, and display resource requirements:
 ```make
 $(PROJECT).hex: $(PROJECT).elf
 	avr-objcopy -j .text -j .data -O ihex $< $@
+	avr-size -C --mcu=$(MCU) $(PROJECT).elf
 ```
 
 ### Additional Command Line Options
