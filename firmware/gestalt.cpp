@@ -18,6 +18,8 @@
 //  |02/28/13 | MODIFIED TO SUPPORT EXTERNAL IO DEF      | ILAN E. MOYER     | gestalt.cpp                 |
 //  |---------|------------------------------------------|-------------------|-----------------------------|
 //  |03/14/13 | ADDED USER LOOP.                         | ILAN E. MOYER     | gestalt.cpp                 |
+//  |---------|------------------------------------------|-------------------|-----------------------------|
+//  |05/10/19 | ADDED ARDUINO MEGA SUPPORT               | ILAN E. MOYER     | gestalt.cpp                 |
 //  --------------------------------------------------------------------------------------------------------
 //
 //  --ABOUT GESTALT-------------------------------------
@@ -239,7 +241,20 @@ void setup(){
   IO_txEnablePORT = &PORTA;
   IO_txEnableDDR = &DDRA;
   IO_txEnablePin = 1<<4;
-  #endif 
+  #endif
+
+  //PIN AND PORT CONFIGURATION FOR ARDUINO MEGA
+  #ifdef ARDUINO_AVR_MEGA2560
+  IO_ledPORT = &PORTB;
+  IO_ledDDR = &DDRB;
+  IO_ledPIN = &PINB;
+  IO_ledPin = 1<<7; //PB7, DIGITAL PIN 13
+
+  IO_txrxPORT = &PORTE;
+  IO_txrxDDR = &DDRE;
+  IO_txPin = 1<<1;
+  IO_rxPin = 1<<0;
+  #endif  
   
   
   //INITIALIZE USART
@@ -303,8 +318,8 @@ void setup(){
 
 //----RECEIVER CODE-------------------------------------
 //--RECEIVER INTERRUPT ROUTINE--
-#if defined(gestalt324)
-ISR(USART0_RX_vect){  //atmega324
+#if defined(gestalt324) || defined(ARDUINO_AVR_MEGA2560)
+ISR(USART0_RX_vect){  //atmega324, atmega2560
 #else
 ISR(USART_RX_vect){   //atmega328, default for arduino
 #endif
@@ -357,10 +372,10 @@ ISR(TIMER2_OVF_vect){
 
 //------TRANSMITTER CODE----------------------------------------------
 //--TRANSMITTER INTERRUPT-------------
-#ifdef gestalt324
-ISR(USART0_TX_vect){//atmega324
+#if defined(gestalt324) || defined(ARDUINO_AVR_MEGA2560)
+ISR(USART0_TX_vect){//atmega324 or atmega2560
 #else
-ISR(USART_TX_vect){ 
+ISR(USART_TX_vect){  //default to arduino atmega328
 #endif
 
   UCSR0A = (1<<TXC0);  //writing 1 to this location clears any potential transmission completion flags
@@ -389,7 +404,7 @@ ISR(USART_TX_vect){
 }
 
 //--ALIAS TO TRANSMITTER INTERRUPT--
-#ifdef gestalt324
+#if defined (gestalt324) || defined(ARDUINO_AVR_MEGA2560)
 ISR(USART0_UDRE_vect, ISR_ALIASOF(USART0_TX_vect));
 #else
 ISR(USART_UDRE_vect, ISR_ALIASOF(USART_TX_vect));
