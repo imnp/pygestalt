@@ -193,7 +193,7 @@ header ul.downloads li + li + li { border-right: none; width: 89px; }
 
 header ul.downloads a strong { font-size: 14px; display: block; color: #222; }
 
-section { padding-left: 330px; float: right; padding-bottom: 50px;} /*padding keeps text from hitting the nav bar on the left*/
+section { padding-left: 330px; padding-bottom: 50px;} /*padding keeps text from hitting the nav bar on the left. Removed float:right so short blocks of text are left-justified.*/
 
 small { font-size: 11px; }
 
