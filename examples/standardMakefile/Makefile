@@ -72,9 +72,10 @@ $(PROJECT).o: $(SOURCES)
 $(PROJECT).elf: $(PROJECT).o
 	avr-g++ $(CFLAGS) $(LDFLAGS) gestalt.o -o $@ $^
 
-#Convert linker file into hex file
+#Convert linker file into hex file, and display resource requirements
 $(PROJECT).hex: $(PROJECT).elf
 	avr-objcopy -j .text -j .data -O ihex $< $@
+	avr-size -C --mcu=$(MCU) $(PROJECT).elf
 
 ## --- ADDITIONAL COMMAND LINE OPTIONS ---
 # Remove all intermediate files
