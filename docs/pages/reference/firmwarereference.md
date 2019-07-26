@@ -9,6 +9,7 @@
 #### I/O
 - USART0 Tx and Rx pins. PD0 and PD1 on Atmega328.
 - Networked Gestalt: three pins for an LED, pushbutton, and transciever enable. These are user-assignable.
+- Arduino: The LED on Digital I/O 13 (PB5) is automatically configured as an output. It can be overridden by making an alternative LED assignment in userSetup().
 
 #### Peripherals
 - USART0 (Universal Serial Tranceiver 0)
