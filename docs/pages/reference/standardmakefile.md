@@ -27,7 +27,7 @@ The starting memory address of the compiled code. Use the above if you are compi
 ADDRESS = 0x0000
 ```
 
-Or, use the above INSTEAD if you are compiling a bootloader. This is valid for the Atmega 328 and 324. If you are compiling for a microcontroller with a different sized memory (e.g. the Atmega 168), you'll need to check the correct starting memory address for the bootloader section:
+Or, use the below INSTEAD if you are compiling a bootloader. This is valid for the Atmega 328 and 324. If you are compiling for a microcontroller with a different sized memory (e.g. the Atmega 168), you'll need to check the correct starting memory address for the bootloader section:
 
 ```make
 ADDRESS = 0x7000
