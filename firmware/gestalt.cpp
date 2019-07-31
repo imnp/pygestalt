@@ -20,6 +20,8 @@
 //  |03/14/13 | ADDED USER LOOP.                         | ILAN E. MOYER     | gestalt.cpp                 |
 //  |---------|------------------------------------------|-------------------|-----------------------------|
 //  |05/10/19 | ADDED ARDUINO MEGA SUPPORT               | ILAN E. MOYER     | gestalt.cpp                 |
+//  |---------|------------------------------------------|-------------------|-----------------------------|
+//  |07/30/19 | ADDED SUPPORT FOR STAND-ALONE MODE       | ILAN E. MOYER     | gestalt.cpp                 |
 //  --------------------------------------------------------------------------------------------------------
 //
 //  --ABOUT GESTALT-------------------------------------
@@ -101,6 +103,12 @@ const uint8_t applicationValid = 170; //0b10101010
 const uint8_t pageSize = 128; //length in bytes of each page
 //--BOOTLOADER STATE VARIABLES--
 uint16_t pageAddress;   //current page address for programming
+#endif
+
+//-- DEFINE STANDALONE MODE PARAMETERS AND STATE --
+#if defined(bootloader) && defined(gestaltStandaloneNode)
+  volatile uint8_t standaloneModeStateFlag; //0: un-triggered, 1: network active, 2: triggered
+  #define standaloneModeTriggerDuration		16000  //in units of 0.128ms, so 2s
 #endif
 
 // --DEFINE TRANCEIVER MEMORY--
@@ -312,6 +320,16 @@ void setup(){
   #endif
 
 
+
+  #if defined(bootloader) && defined(gestaltStandaloneNode)
+  TCCR1A = 0;	//CTC on OCR1A
+  TCCR1B = (1<<WGM12)|(1<<CS12)|(1<<CS10); //CTC on OCR1A, CLK/1024
+  TCCR1C = 0;
+  TCNT1 = 0; //reset the timer/counter
+  OCR1A = standaloneModeTriggerDuration; //in units of 0.128ms (1024 / 8MHz)
+  TIMSK1 = (1<<OCIE1A); //enable interrupts
+  #endif
+
   //ENABLE GLOBAL INTERRUPTS
   sei();
 }
@@ -444,12 +462,24 @@ void transmitMulticastPacket(uint8_t port, uint8_t length ){
 void loop(){
   packetRouter();
   userLoop();
+  #if defined(bootloader) && defined(gestaltStandaloneNode)
+  if(standaloneModeStateFlag == 2){ //application reset is triggered
+	if(eeprom_read_byte((uint8_t*)applicationValidationByte) == applicationValid){
+		applicationStart();
+	}else{
+		standaloneModeStateFlag = 0; //can't boot into application because code isn't valid.
+	}
+  }
+  #endif
 }
 
 
 void packetRouter(){
   if (packetReceivedFlag == true){
-    packetReceivedFlag = false;  //clear packet waiting flag
+	#if defined(bootloader) && defined(gestaltStandaloneNode)
+	standaloneModeStateFlag = 1; //network is active
+	#endif
+	packetReceivedFlag = false;  //clear packet waiting flag
     uint8_t destinationPort = rxBuffer[portLocation];  //gets destination port
     //--PORT TABLE--
     switch(destinationPort){
@@ -628,6 +658,16 @@ void applicationStart(){
   UCSR0B = 0; //clear USART interrupt enables
   TIMSK2 = 0; //clear timer2 interrupt enables
 
+  #if defined(bootloader) && defined(gestaltStandaloneNode)
+    //DISABLE AND RESET TIMER1
+	TIMSK1 = 0;
+	TCCR1A = 0;
+	TCCR1B = 0;
+	TCCR1C = 0;
+	TCNT1 = 0;
+	OCR1A = 0;
+  #endif
+
   //shift interrupts to application space
   MCUCR = (1<<IVCE);
   MCUCR = (0<<IVSEL);
@@ -709,7 +749,24 @@ void setURL(char *newURL, uint8_t newURLLength){
 	url = newURL;
 	urlLength = newURLLength - 1; //subtract so array pointer starting at 0
 	}
-	
+
+#if defined(bootloader) && defined(gestaltStandaloneNode)
+ISR(TIMER1_COMPA_vect)	//transmitter interrupt routine
+  {
+    //DISABLE AND RESET TIMER
+	TIMSK1 = 0;
+	TCCR1A = 0;
+	TCCR1B = 0;
+	TCCR1C = 0;
+	TCNT1 = 0;
+	OCR1A = 0;
+
+	if(standaloneModeStateFlag == 0){ //no network activity
+		standaloneModeStateFlag = 2; //trigger application reset
+	}
+  }
+#endif
+
 #ifdef __cplusplus
 }	//extern "C"
 #endif
