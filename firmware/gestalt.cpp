@@ -107,7 +107,7 @@ uint16_t pageAddress;   //current page address for programming
 
 //-- DEFINE STANDALONE MODE PARAMETERS AND STATE --
 #if defined(bootloader) && defined(gestaltStandaloneNode)
-  volatile uint8_t standaloneModeStateFlag; //0: un-triggered, 1: network active, 2: triggered
+  volatile uint8_t standaloneModeStateFlag = 0; //0: un-triggered, 1: network active, 2: triggered
   #define standaloneModeTriggerDuration		16000  //in units of 0.128ms, so 2s
 #endif
 
