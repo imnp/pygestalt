@@ -45,6 +45,7 @@ The following flags are supported by the Gestalt firmware library:
 - \-Dgestalt324: Builds for the Atmega324, which has different interrupt names.
 - \-Dgestalt328: You'll see this in some makefiles, but it's just a "note-to-self" of sorts, as it doesn't actually do anything.
 - \-DcompileLite: Build for smaller MCUs (e.g. Atmega168), which have a smaller bootloader area.
+- \-DgestaltStandaloneNode:  In the absence of network activity, the bootloader will auto-run valid application code two seconds after power-up, without requiring initialization by a master device. This only applies to the bootloader, and will have no effect if building application code.
 
 The makefile includes all of the following options. You should comment out all except the one you want, or modify to taste:
 
