@@ -32,6 +32,7 @@ ADDRESS = 0x0000
 # -Dgestalt324: Build for an Atmega324 (which has different interrupt names)
 # -Dgestalt328: More of a note-to-self, as is default and has no actual effect on building.
 # -DcompileLite: Build for smaller MCUs (e.g. Atmega168), which have a smaller bootloader area.
+# -DgestaltStandaloneNode: Node will auto-activate application code on power-up after 2 seconds, if network is not active.
 
 # Comment out all but one of the below:
 #  -> Use for a networked Gestalt node application
