@@ -96,4 +96,4 @@ def debugChannelEnabled(debugChannel):
 syntheticModeOff()
 automaticNodeDownloadOff()
 # verboseDebugOn()
-setDebugChannels('units')
+setDebugChannels('comm')

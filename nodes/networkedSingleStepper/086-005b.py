@@ -1,8 +1,8 @@
 # SINGLE AXIS NETWORKED STEPPER NODE
-# 086-005a
+# 086-005b
 # Re-written for pyGestalt 0.7
 #
-# July 7th, 2018
+# April 13th, 2019
 # Ilan E. Moyer
 
 #---- IMPORTS ----
@@ -10,6 +10,7 @@ from pygestalt import nodes, core, packets, utilities, interfaces, config, units
 from pygestalt.utilities import notice
 import time
 import math
+import collections
 
 #---- VIRTUAL NODE ----
 class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gestalt node
@@ -24,21 +25,23 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.stepperDriverCurrentGain = 1.0/ (8*self.senseResistor) #in amps/volt, per the A4988 datasheet, p9
         
         # STEP GENERATION PARAMETERS
-        self.maxSteps = 255 #maximum number of steps per packet (1 byte)
         self.clockFrequency = 184320000.0 #1/s, crystal clock frequency
-        self.stepGenClockTicks = 921.0 #number of system clock ticks per step interrupt
-        self.uStepsPerStep = 1048576  #not to be confused with microstepping. This is the number of internal uSteps before a physical step is triggered.
-        self.uTimeUnit = float(self.stepGenClockTicks) / self.clockFrequency #the time per step gen interrupts, in seconds
+        self.stepGenTimeBase = 1152.0 #number of system clock ticks per step interrupt
+        self.stepGenPeriod = float(self.stepGenTimeBase) / self.clockFrequency #the time per step gen interrupts, in seconds
         
         # AXES
         self.size = 1 #number of axes
         
+        # MOTION BUFFER AND KEYS
+        self.motionSegmentBuffer = self.motionSegmentManager(motionKeyMax = 255, bufferSize = 48)
+        
+        
         # SYNTHETIC PARAMETERS
         self.syntheticMotorCurrentReferenceVoltage = 0 #this is set to match the current request inside setMotorCurrent()
         self.syntheticMotorEnableFlag = 0 #tracks whether the motor is enabled when in synthetic mode.
-        self.syntheticUVelocity = 0 #the current uStep rate in synthetic mode.
         self.syntheticCurrentKey = 0
         self.syntheticStepsRemaining = 0
+        self.syntheticTimeRemaining = 0
         self.syntheticReadPosition = 0
         self.syntheticWritePosition = 0
         
@@ -49,35 +52,38 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.readCurrentReferenceVoltageResponsePacket = packets.template('readCurrentReferenceVoltageResponse',
                                                                           packets.unsignedInt('vrefValue',2)) #the raw ADC value of the driver voltage reference
         
-        self.spinRequestPacket = packets.template('spinRequest',
-                                                  packets.unsignedInt('majorSteps', 1),
-                                                  packets.unsignedInt('directions', 1),
-                                                  packets.unsignedInt('steps', 1),
-                                                  packets.unsignedInt('accel', 1),
-                                                  packets.unsignedInt('accelSteps', 1),
-                                                  packets.unsignedInt('decelSteps', 1),
-                                                  packets.unsignedInt('sync', 1))
+        self.enableDriverRequestPacket = packets.template('enableDriverRequest',
+                                                    packets.unsignedInt('enable', 1))
         
-        self.spinStatusPacket = packets.template('spinStatus',
-                                                 packets.unsignedInt('statusCode', 1),
-                                                 packets.unsignedInt('currentKey', 1),
-                                                 packets.unsignedInt('stepsRemaining', 1), #steps remaining in the current move
+        self.stepRequestPacket = packets.template('stepRequest',
+                                                  packets.fixedPoint('stepper1_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.unsignedInt('segmentTime', 3), #24-bit unsigned. The move time in units of 62.5us.
+                                                  packets.unsignedInt('segmentKey', 1), #a rolling key counter that helps to identify the active segment on the node 
+                                                  packets.unsignedInt('absoluteMove', 1), #0: relative move, 1: absolute move
+                                                  packets.unsignedInt('sync', 1)) #synchronized move if non-zero
+        
+        self.positionResponsePacket = packets.template('positionResponse',
+                                                  packets.fixedPoint('stepper1_absolutePosition', 22, 2)) #24-bit total, 2 fractional step bits (1/4 steps).
+
+        
+        self.stepStatusResponsePacket = packets.template('stepStatusResponse',
+                                                 packets.unsignedInt('statusCode', 1), #1 if a move is queued successfully, 0 if buffer is full.
+                                                 packets.unsignedInt('currentKey', 1), #key of current motion segment
+                                                 packets.unsignedInt('timeRemaining', 3), #segment time remaining, in units of 62.5us
                                                  packets.unsignedInt('readPosition', 1), #position of the read head
                                                  packets.unsignedInt('writePosition', 1)) #position of the write head
         
-        self.setVelocityRequestPacket = packets.template('setVelocityRequest',
-                                                         packets.unsignedInt('uStepRate', 2))
+
     
     def initPorts(self):
         """Binds functions and packets to ports"""
         
-        self.bindPort(port = 20, outboundFunction = self.readCurrentReferenceVoltageRequest, inboundPacket = self.readCurrentReferenceVoltageResponsePacket)
-        self.bindPort(port = 21, outboundFunction = self.enableRequest)
-        self.bindPort(port = 22, outboundFunction = self.disableRequest)
-        self.bindPort(port = 23, outboundFunction = self.spinRequest, outboundPacket = self.spinRequestPacket, inboundPacket = self.spinStatusPacket)
-        self.bindPort(port = 24, outboundFunction = self.setVelocityRequest, outboundPacket = self.setVelocityRequestPacket)
-        self.bindPort(port = 26, outboundFunction = self.spinStatusRequest, inboundPacket = self.spinStatusPacket)
-        self.bindPort(port = 30, outboundFunction = self.syncRequest)
+        self.bindPort(port = 11, outboundFunction = self.readCurrentReferenceVoltageRequest, inboundTemplate = self.readCurrentReferenceVoltageResponsePacket)
+        self.bindPort(port = 12, outboundFunction = self.enableDriverRequest, outboundTemplate = self.enableDriverRequestPacket)
+        self.bindPort(port = 13, outboundFunction = self.stepRequest, outboundTemplate = self.stepRequestPacket, inboundTemplate = self.stepStatusResponsePacket)
+        self.bindPort(port = 14, outboundFunction = self.getPositionRequest, inboundTemplate = self.positionResponsePacket)
+        self.bindPort(port = 15, outboundFunction = self.stepStatusRequest, inboundTemplate = self.stepStatusResponsePacket)
+
     
     #-- PUBLIC USER FUNCTIONS --
     def setMotorCurrent(self, targetMotorCurrent, currentTolerance = 0.05):
@@ -109,6 +115,38 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                     self.syntheticMotorCurrentReferenceVoltage = (float(targetMotorCurrent) /self.stepperDriverCurrentGain)
                 
                 time.sleep(0.5)
+
+    #-- SEGMENT MANAGER --
+    class motionSegmentManager(object):
+        """Mirrors the current motionSegment buffer, to facilitate pausing and recovery."""
+        def __init__(self, motionKeyMax = 255, bufferSize = 48):
+            """Initializes the motion segment memory manager.
+            
+            motionKeyMax -- the maximum value of the motion key before it rolls over
+            bufferSize -- the size of the motion segment buffer on the physical node
+            """
+            self.motionKey = 0 #reset the motion key
+            self.motionKeyMax = motionKeyMax
+            self.maxBufferSize = bufferSize #the max
+             # create a double-ended queue to store motion segments. This is particularly useful for tasks like pausing,
+             # or identifying the total motion time remaining in the buffer. We can limit the buffer to maxBufferSize
+            self.segmentBuffer = collections.deque(maxlen = self.maxBufferSize)
+            
+        
+        def newKey(self):
+            """Pulls and returns a new key for tracking motion segments in the node's buffer"""
+            self.motionKey += 1 #increment the motion key
+            if self.motionKey > self.motionKeyMax: #roll over if exceeds max
+                self.motionKey = 0
+            return self.motionKey
+        
+        def addSegmentToBuffer(self, stepActionObject):
+            """Adds an step request actionObject to the buffer.
+            
+            stepActionObject -- a stepRequest actionObject
+            """
+            self.segmentBuffer.appendleft(stepActionObject) #note that once the buffer size is exceeded, objects will drop off the other end
+            
     
     #-- UTILITY FUNCTIONS --
     def readMotorCurrent(self):
@@ -138,73 +176,49 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
             return {'vrefValue':vrefValue}
         
         
-    class enableRequest(core.actionObject):
-        def init(self):
-            """Enables the motor driver, causing the stepper coils to become energized.
+    class enableDriverRequest(core.actionObject):
+        def init(self, enable = True):
+            """Enables or disables the motor driver, causing the stepper coils to become energized or lose power.
+            
+            enable -- if True, enables the driver. If false, disables the driver.
             
             Returns True if successful, or False otherwise.
             """
+            self.setPacket(enable = {True:1, False:0}[enable]) #1 if enable, 0 if disable
+            
             if self.transmitUntilResponse():
-                notice(self.virtualNode, 'Stepper Motor Enabled.')
+                if enable:
+                    notice(self.virtualNode, 'Stepper Motor '+ {True:'Enabled',False:'Disabled'}[enable] + '.')
                 return True
             else:
-                notice(self.virtualNode, 'Failed to Enable Stepper Motor!')
+                notice(self.virtualNode, 'Failed to '+ {True:'Enable',False:'Disable'}[enable] + ' Stepper Motor!')
                 return False
     
         def synthetic(self):
-            self.virtualNode.syntheticMotorEnableFlag = 1
-            return {}
+            self.virtualNode.syntheticMotorEnableFlag = {True:1, False:0}[enable]
+            return {}   
     
     
-    class disasbleRequest(core.actionObject):
+    class stepRequest(core.actionObject):
+        def init(self, target, segmentTime, absoluteMove = False, sync = False ):
+            segmentKey = self.virtualNode.motionSegmentBuffer.newKey()
+            self.setPacket(stepper1_target = target, segmentTime = segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[sync])
+            if self.transmitUntilResponse():
+                return self.getPacket()
+            else:
+                notice(self.virtualNode, 'Unable to send motion segment!')
+                return False            
+
+    class getPositionRequest(core.actionObject):
         def init(self):
-            """Disables the motor driver, removing power to the stepper motor coils.
-            
-            Returns True if successful, or False otherwise.
-            """
             if self.transmitUntilResponse():
-                notice(self.virtualNode, 'Stepper Motor Disabled.')
-                return True
+                return self.getPacket()['stepper1_absolutePosition']
             else:
-                notice(self.virtualNode, 'Failed to Disable Stepper Motor!')
-                return False
-    
-        def synthetic(self):
-            self.virtualNode.syntheticMotorEnableFlag = 0
-            return {}    
-    
+                notice(self.virtualNode, 'Unable to get absolute position!')
+                return False  
+                       
             
-    class setVelocityRequest(core.actionObject):
-        def init(self, velocity):
-            """Sets the step rate of the virtual major axis.
-            
-            velocity -- the step rate of the virtual major axis, in steps/second
-            
-            This command will be run asynchronously, meaning that the step rate will be changed as soon as
-            the command has been called. It is also worth mentioning that this step rate applies to THE VIRTUAL MAJOR
-            AXIS. During synchronized moves, individual motors may spin at different rates in proportion to the
-            number of steps they are taking relative to the virtual major axis.
-            """
-            
-            # We need to convert velocity in steps/sec, into the number of uSteps that the microcontroller should take per interrupt.
-            # Velocity (steps/sec) * uStepsPerStep (uSteps/step) * uTimeUnit (sec/interrupt) = uSteps/interrupt
-            # Note that the result is divided by 16 so as to fit comfortably inside a 16-bit word. It is multiplied back in firmware.
-            
-            uStepsPerInterrupt = int(round((velocity * self.virtualNode.uStepsPerStep * self.virtualNode.uTimeUnit)/16.0))
-            
-            self.setPacket(uStepRate = uStepsPerInterrupt)
-            if self.transmitUntilResponse():
-                return True
-            else:
-                notice(self.virtualNode, 'Unable to set velocity!')
-                return False
-        
-        def synthetic(self, uStepRate):
-            self.virtualNode.syntheticUVelocity = uStepRate
-            return {}
-            
-            
-    class spinStatusRequest(core.actionObject):
+    class stepStatusRequest(core.actionObject):
         def init(self):
             """Returns the current motion status of the node.
             
@@ -223,7 +237,22 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                 return False
         
         def synthetic(self):
-            return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'stepsRemaining': self.virtualNode.syntheticStepsRemaining,
+            return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
                     'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
-            
+
+
+# TEST CODE HERE
+if __name__ == "__main__":
+    stepperNode = virtualNode()
+    time.sleep(0.5)
+    position = 0
+    for i in range(50):
+        print stepperNode.stepRequest(i*25, i*25*16)
+        time.sleep(0.5)
+        position += i*25
+    time.sleep(1)
+    print "--- TARGET POSITION: " + str(position)
+    while True:
+        print stepperNode.getPositionRequest()
+        time.sleep(0.25)      
         
