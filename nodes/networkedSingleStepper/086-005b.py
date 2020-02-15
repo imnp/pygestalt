@@ -25,7 +25,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.stepperDriverCurrentGain = 1.0/ (8*self.senseResistor) #in amps/volt, per the A4988 datasheet, p9
         
         # STEP GENERATION PARAMETERS
-        self.clockFrequency = 184320000.0 #1/s, crystal clock frequency
+        self.clockFrequency = 18432000.0 #1/s, crystal clock frequency
         self.stepGenTimeBase = 1152.0 #number of system clock ticks per step interrupt
         self.stepGenPeriod = float(self.stepGenTimeBase) / self.clockFrequency #the time per step gen interrupts, in seconds
         
@@ -77,7 +77,6 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
     
     def initPorts(self):
         """Binds functions and packets to ports"""
-        
         self.bindPort(port = 11, outboundFunction = self.readCurrentReferenceVoltageRequest, inboundTemplate = self.readCurrentReferenceVoltageResponsePacket)
         self.bindPort(port = 12, outboundFunction = self.enableDriverRequest, outboundTemplate = self.enableDriverRequestPacket)
         self.bindPort(port = 13, outboundFunction = self.stepRequest, outboundTemplate = self.stepRequestPacket, inboundTemplate = self.stepStatusResponsePacket)
@@ -201,13 +200,22 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
     
     class stepRequest(core.actionObject):
         def init(self, target, segmentTime, absoluteMove = False, sync = False ):
-            segmentKey = self.virtualNode.motionSegmentBuffer.newKey()
+            segmentKey = self.virtualNode.motionSegmentBuffer.newKey() #pull a new segment key
             self.setPacket(stepper1_target = target, segmentTime = segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[sync])
-            if self.transmitUntilResponse():
-                return self.getPacket()
-            else:
-                notice(self.virtualNode, 'Unable to send motion segment!')
-                return False            
+            
+            while True: #make sure the motion segment is loaded into the buffer
+                if self.transmitUntilResponse(releaseChannelOnTransmit = False): #may need to transmit multiple times, so don't release channel automatically
+                    response = self.getPacket()
+                    if response['statusCode']: #segment was loaded
+                        self.releaseChannel() #Done; release the communications channel
+                        break
+                    else: #buffer was full
+                        timeUntilSlotAvailable = self.virtualNode.stepGenPeriod * response['timeRemaining']
+#                         print str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s"
+                        time.sleep(timeUntilSlotAvailable)
+                else:
+                    notice(self.virtualNode, 'Unable to send motion segment!')
+                    return False            
 
     class getPositionRequest(core.actionObject):
         def init(self):
@@ -226,7 +234,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                 statusCode -- will always read 1 to a spinStatusRequest. In the context of the response to a spin request, indicates whether the move was queued successfully.
                 currentKey -- Each motion segment is assigned a sequential ID to confirm nothing has been lost. This will return the key of the motion segment currently
                               under the buffer read head.
-                stepsRemaining -- The number of steps remaining in the current move.
+                timeRemaining -- The time remaining in the current move, in step generator ticks (currently 62.5us).
                 readPosition -- The current position of the read head, which is the buffer location that was last read.
                 writePosition -- The current position of the write head, which is the buffer location that was last written.
             """
@@ -246,9 +254,8 @@ if __name__ == "__main__":
     stepperNode = virtualNode()
     time.sleep(0.5)
     position = 0
-    for i in range(50):
-        print stepperNode.stepRequest(i*25, i*25*16)
-        time.sleep(0.5)
+    for i in range(75):
+        stepperNode.stepRequest(i*25, i*25*16)
         position += i*25
     time.sleep(1)
     print "--- TARGET POSITION: " + str(position)
