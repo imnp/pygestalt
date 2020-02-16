@@ -739,7 +739,7 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
         def synthetic(self):
             """Synthetic node service routine handler for identifyRequest."""
             notice(self.virtualNode, "SYNTHETIC node blinks its LED at you!")            
-
+    
     class syncRequest(core.actionObject):
         """Initiates synchronized behavior across multiple networked nodes."""
         def onChannelAccess(self):
@@ -749,7 +749,15 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
         def synthetic(self):
             """Synthetic node service routine handler for syncRequest."""
             notice(self.virtualNode, "SYNTHETIC syncronization packet transmitted.")
+            self.virtualNode.syntheticSync() #call syntheticSync method in virtual node, so that it can act on a synchronization request
+
+    def syntheticSync(self):
+        """Called by syncRequest when in synthetic mode.
         
+        It is intended that this function is overridden by the virtual node child class.
+        """
+        pass
+
     class resetRequest(core.actionObject):
         """Requests that the node resets itself."""
         def init(self):
