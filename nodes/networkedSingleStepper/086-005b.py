@@ -10,7 +10,8 @@ from pygestalt import nodes, core, packets, utilities, interfaces, config, units
 from pygestalt.utilities import notice
 import time
 import math
-import collections
+import collections, Queue
+import threading
 
 #---- VIRTUAL NODE ----
 class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gestalt node
@@ -33,18 +34,28 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.size = 1 #number of axes
         
         # MOTION BUFFER AND KEYS
-        self.motionSegmentBuffer = self.motionSegmentManager(motionKeyMax = 255, bufferSize = 48)
+        self.motionBufferSize = 48
+        self.motionSegmentBuffer = self.motionSegmentManager(motionKeyMax = 255, bufferSize = self.motionBufferSize)
         
         
         # SYNTHETIC PARAMETERS
         self.syntheticMotorCurrentReferenceVoltage = 0 #this is set to match the current request inside setMotorCurrent()
         self.syntheticMotorEnableFlag = 0 #tracks whether the motor is enabled when in synthetic mode.
         self.syntheticCurrentKey = 0
-        self.syntheticStepsRemaining = 0
         self.syntheticTimeRemaining = 0
         self.syntheticReadPosition = 0
         self.syntheticWritePosition = 0
+        self.syntheticStepperPositions = [0 for i in range(self.size)]
         
+        # SYNTHETIC BUFFER
+        self.syntheticMotionBuffer = collections.deque()
+        
+        if(config.syntheticMode()): #running in synthetic mode
+            self.syntheticStepGenerator = threading.Thread(target = self.syntheticStepGeneratorThread, kwargs = {'syntheticMotionBuffer':self.syntheticMotionBuffer,
+                                                                                      'virtualNode': self})
+            self.syntheticStepGenerator.daemon = True                                 
+            self.syntheticStepGenerator.start() 
+
         
     def initPackets(self):
         """Initializes all packet definitions"""
@@ -206,16 +217,30 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
             while True: #make sure the motion segment is loaded into the buffer
                 if self.transmitUntilResponse(releaseChannelOnTransmit = False): #may need to transmit multiple times, so don't release channel automatically
                     response = self.getPacket()
+                    print response
                     if response['statusCode']: #segment was loaded
                         self.releaseChannel() #Done; release the communications channel
                         break
                     else: #buffer was full
                         timeUntilSlotAvailable = self.virtualNode.stepGenPeriod * response['timeRemaining']
-#                         print str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s"
+                        print str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s"
                         time.sleep(timeUntilSlotAvailable)
                 else:
                     notice(self.virtualNode, 'Unable to send motion segment!')
-                    return False            
+                    return False
+                
+        def synthetic(self, stepper1_target, segmentTime, segmentKey, absoluteMove, sync):
+            if(len(self.virtualNode.syntheticMotionBuffer)<= self.virtualNode.motionBufferSize): #space available in buffer
+                self.virtualNode.syntheticMotionBuffer.appendleft({'stepper1_target':stepper1_target, 'segmentTime':segmentTime, 'segmentKey': segmentKey,
+                                                                   'absoluteMove':absoluteMove, 'sync':sync})
+                self.virtualNode.syntheticWritePosition += 1
+                if(self.virtualNode.syntheticWritePosition == self.virtualNode.motionBufferSize):
+                    self.virtualNode.syntheticWritePosition = 0
+                return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
+                        'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
+            else:
+                return {'statusCode':0, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
+                        'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}            
 
     class getPositionRequest(core.actionObject):
         def init(self):
@@ -224,6 +249,10 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
             else:
                 notice(self.virtualNode, 'Unable to get absolute position!')
                 return False  
+
+        def synthetic(self):
+            print self.virtualNode.syntheticStepperPositions[0]
+            return {'stepper1_absolutePosition':self.virtualNode.syntheticStepperPositions[0]}
                        
             
     class stepStatusRequest(core.actionObject):
@@ -249,17 +278,45 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                     'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
 
 
+    # ----- SYNTHETIC MOTION THREAD -----
+    def syntheticStepGeneratorThread(self, syntheticMotionBuffer, virtualNode):
+        while True:
+            if(len(syntheticMotionBuffer)>0):
+                if(syntheticMotionBuffer[-1]['sync'] == 0): #OK to load move
+                    currentMove = syntheticMotionBuffer.pop()
+                    virtualNode.syntheticCurrentKey = currentMove['segmentKey']
+                    virtualNode.syntheticTimeRemaining = currentMove['segmentTime']
+                    virtualNode.syntheticReadPosition += 1
+                    if(virtualNode.syntheticReadPosition == virtualNode.motionBufferSize):
+                        virtualNode.syntheticReadPosition = 0
+                    time.sleep(virtualNode.syntheticTimeRemaining*virtualNode.stepGenPeriod)
+                    if(currentMove['absoluteMove']):
+                        relativeMotion = currentMove['stepper1_target'] - virtualNode.syntheticStepperPositions[0]
+                    else:
+                        relativeMotion = currentMove['stepper1_target']
+                    virtualNode.syntheticStepperPositions[0] += relativeMotion
+            time.sleep(0.001)
+            
+
 # TEST CODE HERE
 if __name__ == "__main__":
+    config.syntheticModeOn()
     stepperNode = virtualNode()
     time.sleep(0.5)
     position = 0
-    for i in range(75):
+    for i in range(50):
         stepperNode.stepRequest(i*25, i*25*16)
         position += i*25
     time.sleep(1)
+#     for i in range(15):
+#         print "SYNC REQUEST"
+#         syncRequest = stepperNode.syncRequest()
+#         syncRequest.commit()
+#         syncRequest.clearForRelease()
+#         time.sleep(0.25)
     print "--- TARGET POSITION: " + str(position)
     while True:
         print stepperNode.getPositionRequest()
+        print stepperNode.stepStatusRequest()
         time.sleep(0.25)      
         
