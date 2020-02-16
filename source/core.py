@@ -141,9 +141,9 @@ class actionObject(object):
         the channel access lock unless explicitly directed not to.
         """
         self._channelAccessLock_ = channelAccessLock    #store a ref to the channel access lock
-        self.onChannelAccess()  #call the user-defined onChannelAccess method
         self._channelAccessGrantedFlag_.set()   #set the channel access flag, to indicate to another thread that the actionObject has channel access
-    
+        self.onChannelAccess()  #call the user-defined onChannelAccess method    
+        
     def channelAccessIsGranted(self):
         """Returns True if the actionObject currently has interface channel access."""
         return self._channelAccessGrantedFlag_.is_set()
@@ -179,6 +179,16 @@ class actionObject(object):
             notice(self, "actionObject has no valid channel access lock on call to _releaseChannelAccessLock_")
             notice(self, "Instead channel access lock type is " + str(type(self._channelAccessLock_)))
             return False
+    
+    def releaseChannel(self):
+        """Releases the communication channel.
+        
+        This method is typically called once the actionObject has finished transmitting multiple times. One example use-case is when loading a motion
+        buffer that may be full at the time of initial transmission and requires a waiting period and then a re-attempt.
+        
+        Note that this is the user-accessible alias to _releaseChannelAccessLock_()
+        """
+        return self._releaseChannelAccessLock_()
     
     @classmethod
     def _putActionObjectIntoInboundPacketFlagQueue_(cls, actionObject):
