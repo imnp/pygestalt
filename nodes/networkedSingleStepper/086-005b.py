@@ -277,6 +277,13 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
             return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
                     'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
 
+    def syntheticSync(self):
+        """Overrides the base class method, and is run in synthetic mode whenever a synchronization request is made."""
+        for motionSegment in reversed(self.syntheticMotionBuffer):
+            if motionSegment['sync'] ==1:
+                motionSegment['sync'] = 0
+                return
+        notice(self, "SYNTHETIC SYNC: Received Extra Sync Command!")
 
     # ----- SYNTHETIC MOTION THREAD -----
     def syntheticStepGeneratorThread(self, syntheticMotionBuffer, virtualNode):
@@ -300,23 +307,22 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
 
 # TEST CODE HERE
 if __name__ == "__main__":
-    config.syntheticModeOn()
+#     config.syntheticModeOn()
+#     config.verboseDebugOn()
     stepperNode = virtualNode()
     time.sleep(0.5)
     position = 0
-    for i in range(50):
-        stepperNode.stepRequest(i*25, i*25*16)
+    for i in range(30):
+        stepperNode.stepRequest(i*25, i*25*16, sync = i%2)
         position += i*25
     time.sleep(1)
-#     for i in range(15):
-#         print "SYNC REQUEST"
-#         syncRequest = stepperNode.syncRequest()
-#         syncRequest.commit()
-#         syncRequest.clearForRelease()
-#         time.sleep(0.25)
+    for i in range(15):
+        syncRequest = stepperNode.syncRequest()
+        syncRequest.commit()
+        syncRequest.clearForRelease()
+        time.sleep(0.25)
     print "--- TARGET POSITION: " + str(position)
     while True:
         print stepperNode.getPositionRequest()
-        print stepperNode.stepStatusRequest()
         time.sleep(0.25)      
         

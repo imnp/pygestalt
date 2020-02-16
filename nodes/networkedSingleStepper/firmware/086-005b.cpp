@@ -67,7 +67,7 @@ void stepper1_reverse();
 #define gestaltPort_sync			8 	// Triggers a sync. This is a proxy for the sync control line.
 #define gestaltPort_getVRef 		11	// Read current reference
 #define gestaltPort_enableDrivers	12	// enables or disables stepper driver
-#define gestaltPort_stepRequest		13  // steps a relative number of steps
+#define gestaltPort_stepRequest		13  // steps a relative number of steps, or to an absolute position
 #define gestaltPort_getPosition		14	// returns the current absolute position
 #define gestaltPort_getStatus		15	// returns the current node status
 
@@ -377,11 +377,18 @@ uint8_t loadSegmentIntoStepGenerator(){
 		}
 		if(motionBuffer[newReadPosition].waitForSync == 1){ //can't load segment, because waiting on a synchronization packet
 			waitingForSync = 1; //raise global flag that waiting for sync
-			ledOn();
+//			ledOn();
 			return 0; //can't load segment
 		}else{ //segment can be loaded. Go ahead!
 			waitingForSync = 0; //clear wait-for-sync flag
-			motionBuffer_readPosition = newReadPosition; //Advance the read head
+//			ledOff();
+			//Advance the sync search position if it is on the prior read position. By definition, if this segment has been loaded,
+			//then it is no longer awaiting synchronization and we can indicate that it has already been synchronized.
+			if(motionBuffer_syncSearchPosition == motionBuffer_readPosition){
+				motionBuffer_syncSearchPosition = newReadPosition;
+			}
+			//Advance the read head
+			motionBuffer_readPosition = newReadPosition;
 			// LOAD SEGMENT!
 			uint8_t stepperIndex;
 			int32_t targetSteps; //working register
@@ -471,6 +478,27 @@ void svc_getStatus(){
 	transmitStatus(gestaltPort_getStatus, 1);
 }
 
+void svc_sync(){
+//	ledOn();
+	// Inbound synchronization signal
+	if(waitingForSync){
+		TCNT1 = 0; //step generator is currently waiting on synchronization, so reset counter to synchronize clocks.
+	}
+	uint8_t newSyncSearchPosition = motionBuffer_syncSearchPosition;
+	do{
+	if (newSyncSearchPosition == motionBuffer_writePosition){   //have already searched to the current write position
+	  motionBuffer_syncSearchPosition = newSyncSearchPosition; //record that have searched to here.
+	  return;
+	}
+	newSyncSearchPosition++; //increment sync search position
+	if (newSyncSearchPosition == motionBuffer_length){  //wrap-around
+	  newSyncSearchPosition = 0;
+	}
+	}while(motionBuffer[newSyncSearchPosition].waitForSync != 1);
+	motionBuffer_syncSearchPosition = newSyncSearchPosition; //commit changes to sync write position.
+	motionBuffer[newSyncSearchPosition].waitForSync = 0; //move is now ready to be run
+}
+
 //  ----- USER PACKET ROUTER -----
 void userPacketRouter(uint8_t destinationPort){
 	switch(destinationPort){
@@ -488,6 +516,9 @@ void userPacketRouter(uint8_t destinationPort){
 			break;
 		case gestaltPort_getStatus: //status request
 			svc_getStatus();
+			break;
+		case gestaltPort_sync: //synchronization packet
+			svc_sync();
 			break;
 	};
 };
