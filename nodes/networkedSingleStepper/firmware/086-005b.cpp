@@ -148,6 +148,10 @@ void userSetup(){
 	IO_txEnableDDR = &DDRD;
 	IO_txEnablePin = 1<<PD2;
 
+	// -- CLOCK GEN INTERRUPT TIMING MEASUREMENT --
+	DDRB |= (1<<PB4); //configure MISO as output
+	PORTB &= ~(1<<PB4); //initialize LOW
+
 	// -- CONFIGURE ADC --
 	ADMUX = (0<<REFS1)|(1<<REFS0)|(0<<ADLAR)|(stepper1_vRef);   //AVcc Reference, Right Adjusted, Source is stepper1_vRef
 	ADCSRA = (1<<ADEN)|(0<<ADSC)|(0<<ADATE)|(0<<ADIF)|(0<<ADIE)|(1<<ADPS2)|(1<<ADPS1)|(1<<ADPS0);  //Enable ADC, clock source is CLK/128
@@ -460,8 +464,10 @@ void svc_enableDrivers(){
 }
 
 void svc_stepRequest(){
+	ledOn();
 	uint8_t success = loadSegmentIntoMotionBuffer(); //0 if buffer is full, 1 if successful
 	transmitStatus(gestaltPort_stepRequest, success);
+	ledOff();
 }
 
 void svc_getPosition(){
@@ -481,22 +487,24 @@ void svc_getStatus(){
 void svc_sync(){
 //	ledOn();
 	// Inbound synchronization signal
+	ledOn();
 	if(waitingForSync){
 		TCNT1 = 0; //step generator is currently waiting on synchronization, so reset counter to synchronize clocks.
 	}
 	uint8_t newSyncSearchPosition = motionBuffer_syncSearchPosition;
 	do{
-	if (newSyncSearchPosition == motionBuffer_writePosition){   //have already searched to the current write position
-	  motionBuffer_syncSearchPosition = newSyncSearchPosition; //record that have searched to here.
-	  return;
-	}
-	newSyncSearchPosition++; //increment sync search position
-	if (newSyncSearchPosition == motionBuffer_length){  //wrap-around
-	  newSyncSearchPosition = 0;
-	}
+		if (newSyncSearchPosition == motionBuffer_writePosition){   //have already searched to the current write position
+		  motionBuffer_syncSearchPosition = newSyncSearchPosition; //record that have searched to here.
+		  return;
+		}
+		newSyncSearchPosition++; //increment sync search position
+		if (newSyncSearchPosition == motionBuffer_length){  //wrap-around
+		  newSyncSearchPosition = 0;
+		}
 	}while(motionBuffer[newSyncSearchPosition].waitForSync != 1);
 	motionBuffer_syncSearchPosition = newSyncSearchPosition; //commit changes to sync write position.
 	motionBuffer[newSyncSearchPosition].waitForSync = 0; //move is now ready to be run
+	ledOff();
 }
 
 //  ----- USER PACKET ROUTER -----
@@ -525,6 +533,7 @@ void userPacketRouter(uint8_t destinationPort){
 
 //  ----- STEP GENERATOR INTERRUPT ROUTINE -----
 ISR(TIMER1_COMPA_vect){
+	PORTB |= (1<<PB4); //TEST -- set MISO LOW on exit
 	if(activeSegment_timeRemaining > 0){ //something to do!
 		activeSegment_timeRemaining --; //decrement time remaining
 
@@ -547,4 +556,5 @@ ISR(TIMER1_COMPA_vect){
 			enableAllDrivers();
 		}
 	}
+	PORTB &= ~(1<<PB4); // TEST -- set MISO LOW on exit
 }
