@@ -437,7 +437,15 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     arguments -- positional arguments to be forwarded on to the targets. Any tuples will be uniquely distributed based on
             the position in the tuple. Other types will be evenly distributed to all targets
     keywordArguments -- keyword arguments to be forwarded on to the targets. Same distribution rules as for positional arguments.
-    
+                        Certain "reserved" keyword arguments can be provided that affect the behavior of this function and any
+                        resulting actionSets. These will be extracted before the remaining keyword arguments are passed along to 
+                        the target function. Reserved keyword arguments are:
+                            sync -- if False, synchronization will be blocked. If True, sync will be forced, at least to the best abilities
+                                    of this function.
+                            external -- if True, any resulting actionSets will not automatically commit themselves to the channel access
+                                        queue, and will not automatically release themselves for channel access.
+        
+        
     This function will make a function call at the provided attribute on all objects in the provided target list. If any of
     the positional arguments in args, or the keyword arguments in kwargs, are provided as a tuple, these arguments will be uniquely
     distributed to all objects in targetList. For example, distributedFunctionCall(callOwner, [obj1, obj2], funcName, (1,2), myArg = 3)
@@ -449,12 +457,12 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     In the event that uniquely distributed arguments exist, we assume that the function call should be synchronized across the
     targets. In order to accomplish this, a synchronization token type can be passed to this method. An instance of this token will
     be generated and injected into the kwargs of the distributed function calls with the key 'sync'. To prevent this behavior,
-    None or False can be provided to this method instead.
+    None or False can be provided as the syncTokenType instead.
     
-    If no syncTokenType is provided, there are no uniquely distributed arguments, or the returned types are not either actionObjects or
-    actionSequences, return values for each of these calls will be simply returned as a concatenated tuple. If a syncTokenType IS provided, 
-    AND if there ARE uniquely distributed arguments, AND all returned types are either an actionObject or an actionSequence, an actionSet
-    will be returned.
+    This function returns either a concatenated tuple corresponding to the return values of each call, OR an actionSet. An actionSet will be 
+    returned if synchronization has been attempted AND all returned types are either an actionObject or an actionSequence. Synchronization
+    will only be attempted if a syncTokenType is provided, sync is not explicitly blocked by a reserved keyword argument, AND either there
+    are uniquely distributed arguments OR synchronization is explicitly forced by a reserved keyword argument.
     
     If an error occurs, returns False instead.
     """
@@ -464,6 +472,19 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     expandedArguments = [] #stores positional arguments as [[arg1_target1, arg1_target2, ...], [arg2_target1, arg2_target2]]
     expandedKeywordArguments = [] #stores keyword arguments as [[{arg1_target1},{arg1_target2}],[{arg2_target1},{arg2_target2}]]
     uniqueDistribution = False #starts as False, but set to True should any arguments require unique distribution
+    
+    #-- Pull Out Reserved Keyword Arguments --
+    if "sync" in keywordArguments: #allows the caller to force or block a synchronization attempt with the reserved "sync" keyword argument
+        blockSync = not keywordArguments.pop('sync')
+        forceSync = not blockSync
+    else: #sync is neither forced nor blocked, and will proceed using the established synchronization conditions
+        blockSync = False 
+        forceSync = False
+    
+    if "external" in keywordArguments: #if external = True is provided, any resulting actionSets will not automatially commit and release themselves.
+        external = keywordArguments.pop('external')
+    else:
+        external = False #resulting actionSets will automatically commit and release themselves
     
     #-- Organize Positional Arguments --
     for argument in arguments: #iterate over all provided positional arguments
@@ -478,6 +499,7 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
             expandedArguments += [[argument for target in targetList]]
     
     collectedArguments = zip(*tuple(expandedArguments)) #a list of tuples: [(arg1_target1, arg2_target1), (arg1_target2, arg2_target2)]
+    if collectedArguments == []: collectedArguments = [() for target in targetList] #This needs to be the correct size to properly zip into function calls, even if empty.
     
     #-- Organize Keyword Arguments --
     for key, value in keywordArguments.iteritems(): #iterate over all provided keyword arguments
@@ -494,9 +516,10 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     zippedKeywordArguments = zip(*tuple(expandedKeywordArguments)) # a list of tuples: [({arg1_target1},{arg2_target1}), ({arg1_target2}, arg2_target2})]
     collectedKeywordArguments = [{key:value for pair in thisTuple for key, value in pair.items()} for thisTuple in zippedKeywordArguments]
         # The above results in [{arg1_target1, arg2_target1}, {arg1_target2, arg2_target2}]
+    if collectedKeywordArguments == []: collectedKeywordArguments = [{} for target in targetList] #This needs to be the correct size to properly zip into function calls, even if empty.
     
     #-- Synchronization --
-    if uniqueDistribution and syncTokenType: #unique distribution has occured, and syncronization is enabled
+    if (uniqueDistribution or forceSync) and syncTokenType and not blockSync: #unique distribution has occured or synchronization is forced, a sync token type is avaliable, and sync is not explicitly blocked
         syncToken = syncTokenType() #generate a new syncronization token
         for keywordDictionary in collectedKeywordArguments: keywordDictionary.update({'sync':syncToken}) #updates all kwarg dictionaries
     
