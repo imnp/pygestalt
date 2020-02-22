@@ -11,6 +11,7 @@ import copy
 from pygestalt import core, packets, utilities, interfaces, config
 from pygestalt.utilities import notice, debugNotice
 import functools
+import inspect, types
 
 
 #---- GESTALT NODES ----
@@ -1072,6 +1073,42 @@ class arduinoGestaltNode(gestaltNodeShell):
 
 
 #---- COMPOUND NODES ----  
+def pattern(numberOfNodes = 1, names = None, interface = None, filename = None, nodeType = None):
+    """Returns a compoundNode array of a single node type.
+    
+    numberOfNodes -- the number of nodes to be created. Default value is 1.
+    names -- names to be used for each node. If a tuple or list is provided, one node will be created per name. If a string is provided,
+             and numberOfNodes is provided, then the name will be patterned. Otherwise a single node will be created and returned as a compound
+             node. If no name is provided, then a generic name will be used for each node.
+    interface -- the interface to be provided to each node. For networkedGestaltNodes, a common default interface will be provided.
+    filename -- the filename of the virtual node. If not provided, it will need to be provided by the node on the network.
+    nodeType -- a pyGestalt node type. The default is networkedGestaltNode, as this is the intended use pattern for compoundNode. However,
+                types such as soloGestaltNode and arduinoGestaltNode could be used.
+                
+    Returns a compoundNode containing the pattern of nodes.
+    """
+    # Determine number of nodes, and names
+    if type(names) == list or type(names) == tuple: # multiple names are provided
+        numberOfNodes = len(names) #derive number of nodes from number of names
+    else: #need to generate a list of names
+        if names == None: names = "PatternedNode" #No name is provided, so use a generic one
+        names = [names + "-" + str(index+1) for index in range(numberOfNodes)]
+    
+    # Set Node Type
+    if nodeType == None: nodeType = networkedGestaltNode
+    
+    # Create a default interface
+    if nodeType == networkedGestaltNode and interface == None:
+        print "CREATING MULTPLE NODES: NO INTERFACE PROVIDED. DEFAULTING TO GESTALT + SERIAL @ 115.2kbps OVER FTDI"
+        serialInterface = interfaces.serialInterface(baudrate = 115200, interfaceType = 'ftdi')
+        interface = interfaces.gestaltInterface(name = "auto generated Gestalt interface", interface = serialInterface)
+    
+    nodes = tuple([nodeType(name = nodeName, filename = filename, interface = interface) for nodeName in names])
+        
+    return compoundNode(*nodes)       
+        
+    
+
 
 class compoundNode(object):
     """Distributes and synchronizes function calls across multiple nodes.
@@ -1118,7 +1155,12 @@ class compoundNode(object):
         
         # We use functools.partial, which will return a callable object that wraps core.distributedFunctionCall, but preloads
         # some key pre-determined arguments that set up how the distribution occurs.
-        return functools.partial(core.distributedFunctionCall(self, self._nodes_, attribute, core.syncToken))
+        if self._okToSync_(attribute):
+            syncToken = core.syncToken
+        else:
+            syncToken = False
+        
+        return functools.partial(core.distributedFunctionCall, self, self._nodes_, attribute, syncToken) #distributedFunctionCall(owner, targetList, attribute, syncTokenType, *arguments, **keywordArguments)
     
     def _validateInterfaceConsistency_(self):
         """Tests whether all constituent nodes share a common interface.
@@ -1130,6 +1172,42 @@ class compoundNode(object):
             return interfaces[0] #return the common interface
         else:
             return False #no common interface, return False
+    
+    def _okToSync_(self, attribute):
+        """Determines whether all targets can accept a synchronization token.
+        
+        All actionObjects silently accept Sync tokens and leave it up to the user what to do with them. However, it is common practice
+        for a virtual node to wrap the actionObject call in a function that does some additional logic. For example, a stepper motor
+        controller's setMotorCurrent() may be a function guiding the user thru a process like turning a potentiometer, rather than an actionObject. 
+        These user-defined functions may not accept "sync" as an input parameter. Therefore, we want to make sure that all targets of the distributed 
+        function call are actually able to accept a sync token before we provide one.
+        
+        Returns True if all targets can accept a sync token, or False if not.
+        """
+        
+        return all([self._acceptsSyncToken_(node, attribute) for node in self._nodes_])
+    
+    def _acceptsSyncToken_(self, node, attribute):
+        """Determines whether a target can accept a synchronization token.
+        
+        Returns True if:
+            - The target is an actionObject class, because these by default accept sync tokens
+            - The target is a FUNCTION or METHOD that either explicitly takes 'sync' as an argument, or accepts kwargs.
+        Returns False if none of the above conditions are met. Note that if the target is a class other than actionObject, False will be returned by default.
+        """
+        if hasattr(node, attribute): #first check that node actually has the requested attribute
+            target = getattr(node, attribute)
+            if type(target) == core.actionObject: #actionObject, so return True by default
+                return True
+            elif inspect.isfunction(target) or inspect.ismethod(target): #function, need to check if it accepts sync, either explicitly or as **kwargs
+                args, varargs, keywords, defaults = inspect.getargspec(target)
+                if 'sync' in args or keywords: #either accepts sync explicitly as an argument, or accepts multiple keyword arguments
+                    return True
+            else:
+                return False
+        else:
+            return False
+        
     
     
     
