@@ -487,7 +487,7 @@ void svc_getStatus(){
 void svc_sync(){
 //	ledOn();
 	// Inbound synchronization signal
-	ledOn();
+//	ledOn();
 	if(waitingForSync){
 		TCNT1 = 0; //step generator is currently waiting on synchronization, so reset counter to synchronize clocks.
 	}
@@ -504,7 +504,7 @@ void svc_sync(){
 	}while(motionBuffer[newSyncSearchPosition].waitForSync != 1);
 	motionBuffer_syncSearchPosition = newSyncSearchPosition; //commit changes to sync write position.
 	motionBuffer[newSyncSearchPosition].waitForSync = 0; //move is now ready to be run
-	ledOff();
+//	ledOff();
 }
 
 //  ----- USER PACKET ROUTER -----
@@ -533,7 +533,7 @@ void userPacketRouter(uint8_t destinationPort){
 
 //  ----- STEP GENERATOR INTERRUPT ROUTINE -----
 ISR(TIMER1_COMPA_vect){
-	PORTB |= (1<<PB4); //TEST -- set MISO LOW on exit
+//	PORTB |= (1<<PB4); //TEST -- set MISO LOW on exit
 	if(activeSegment_timeRemaining > 0){ //something to do!
 		activeSegment_timeRemaining --; //decrement time remaining
 
@@ -550,11 +550,11 @@ ISR(TIMER1_COMPA_vect){
 			}
 		}
 		step(stepMask); //take steps
-
-	}else{ //waiting on a new packet
+	}
+	if(activeSegment_timeRemaining == 0){ //waiting on a new packet. Note this could happen on the heels of a segment concluding, in the same interrupt call!
 		if(loadSegmentIntoStepGenerator()==1){ //try to load a segment into the step generator
 			enableAllDrivers();
 		}
 	}
-	PORTB &= ~(1<<PB4); // TEST -- set MISO LOW on exit
+//	PORTB &= ~(1<<PB4); // TEST -- set MISO LOW on exit
 }
