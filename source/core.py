@@ -387,7 +387,44 @@ class actionSet(object):
 
 class syncToken(object):
     """A token object used to synchronize multiple nodes on a network."""
-    pass
+    def __init__(self):
+        self.parameters = {} # Parameters are stored as {parameterName:(parameterValue1, parameterValue2,...)}
+    
+    def push(self, **kwargs):
+        """Stores named parameters on the sync token.
+        
+        kwargs -- all arguments must be provided as keyword arguments
+        """
+        for parameterName in kwargs: #iterate over all provided arguments
+            if parameterName in self.parameters: #update an already-stored parameter
+                self.parameters[parameterName] += (kwargs[parameterName],)
+            else: #parameter isn't already stored
+                self.parameters.update({parameterName:(kwargs[parameterName],)})
+        
+    def pull(self, *parameterNames):
+        """Returns a set of parameters and their stored values.
+        
+        parameterNames -- a series of strings provided as arguments, each of which corresponds to a requested parameter from the sync token.
+        
+        Returns a tuple containing the requested parameters in the order they are requested. If no arguments are provided, the entire .
+        """
+        if len(parameterNames) == 0:
+            return self.parameters
+        elif len(parameterNames) == 1:
+            return self.parameters[parameterNames[0]]
+        else:
+            return tuple([self.parameters[parameterName] for parameterName in parameterNames])
+    
+    def pullMaxValue(self, parameterName):
+        """Returns the maximum value of the stored values for a given parameter."""
+        values = self.parameters[parameterName]
+        return max(values)
+    
+    def pullMinValue(self, parameterName):
+        """Returns the minimum value of the stored values for a given parameter."""
+        values = self.parameters[parameterName]
+        return min(values)
+        
 
 def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *arguments, **keywordArguments):
     """Distributes a function call across a list of target objects.
