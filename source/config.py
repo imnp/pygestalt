@@ -47,15 +47,15 @@ def automaticNodeDownload():
     the web address provided by the physical node upon association. If this is unsuccessful, pyGestalt will
     then attempt to find the virtual node file in the local directory.
     """
-    return getGlobalVariable('automaticNodeDownload')
+    return getGlobalVariable('automaticNodeDownloadEnabled')
 
 def automaticNodeDownloadOn():
-    """Sets the global automaticNodeDownload flag to True."""
-    setGlobalVariable('automaticNodeDownload', True)
+    """Sets the global automaticNodeDownloadEnabled flag to True."""
+    setGlobalVariable('automaticNodeDownloadEnabled', True)
     
 def automaticNodeDownloadOff():
-    """Sets the global automaticNodeDownload flag to False."""
-    setGlobalVariable('automaticNodeDownload', True)
+    """Sets the global automaticNodeDownloadEnabled flag to False."""
+    setGlobalVariable('automaticNodeDownloadEnabled', True)
 
 
 
