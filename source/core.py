@@ -51,21 +51,33 @@ class actionObject(object):
             return None #not bound, return None
         
         newActionObject = object.__new__(cls)   #creates the new actionObject
-        newActionObject._init_()    #runs the actionObject base class's initialization. Note that
+        
+        if 'sync' in kwargs: #determine if the action object was called in synchrony with other action objects
+            sync = kwargs.pop('sync') #yes, so pull sync token
+        else:
+            sync = False #no, so set sync flag to False
+        
+        newActionObject._init_(sync)    #runs the actionObject base class's initialization. Note that
                                     #__init__ is intentionally not used, because otherwise it would get called twice.
         returnValue = newActionObject.init(*args, **kwargs) # calls the user-defined initialization routine, this time 
                                                             # with any provided arguments.
+        
+        if sync: newActionObject.onSyncPush() #gives nodes the chance to publish synchronizing information
         
         if returnValue == None:     #if the user initialization doesn't return anything, then return the actionObject
             return newActionObject
         else:                       #otherwise pass along whatever the user has provided
             return returnValue
         
-    def _init_(self):
+    def _init_(self, sync):
         """actionObject initialization method.
         
-        Note that no arguments are provided because user-supplied arguments are handled strictly by the subclass's init() method.
+        sync -- A sync token if this actionObject is being created as part of an actionSet, or False if not.
+        
+        Note that no other arguments are provided because user-supplied arguments are handled strictly by the subclass's init() method.
         """
+        
+        self._syncToken_ = sync
         self._outboundPacketDictionary_ = {}    #stores key:value pairs to be encoded by _encodeOutboundPacket_
         self._inboundPacketDictionary_ = {} #stores key:value pairs decoded by _decodeAndSetInboundPacket_
         
@@ -80,9 +92,37 @@ class actionObject(object):
     def init(self, *args, **kwargs):    #user initialization routine. This should get overridden by the subclass.
         """actionObject subclass's initialization routine.
         
-        This should be overridden by the user-defined subclass."""
+        This should be overridden by the user-defined subclass.
+        """
         pass
     
+    def isSync(self):
+        """Returns True if this actionObject is being synchronized, or False if not."""
+        if self._syncToken_:
+            return True
+        else:
+            return False
+    
+    def onSyncPush(self):
+        """Provides an opportunity to push attributes to the syncToken.
+        
+        Synchronization may require that all nodes have access to certain shared information. Here is when a node has the chance to publish
+        this shared information.
+        
+        This method is called after the user initialization init(), but only if a sync token is provided. If used, this method should be overridden by the user.
+        """
+        pass
+    
+    def onSyncPull(self):
+        """Provides an opportunity to pull attributes from the syncToken.
+        
+        Synchronization may require that all nodes have access to certain shared information. Here is when a node has the chance to act on this
+        information, once all nodes have published.
+        
+        This method is called after all of the nodes in an actionSet have been instantiated. If used, this method should be overridden by the user.
+        """
+        pass
+        
     def setPacket(self, **kwargs):
         """Updates the dictionary that will be encoded by _outboundTemplate_ into an outgoing packet, using the provided keyword arguments.
         
