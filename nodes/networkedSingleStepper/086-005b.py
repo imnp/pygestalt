@@ -106,6 +106,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         
         This function will continue to run until the motor current is within tolerance of the target.
         """
+        
         if not utilities.fuzzyEquals(self.readMotorCurrent(), targetMotorCurrent, currentTolerance):
             #check if motor current is within tolerance before beginning UI routine.
             while True:
@@ -208,27 +209,49 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
             self.virtualNode.syntheticMotorEnableFlag = {True:1, False:0}[enable]
             return {}   
     
-    
     class stepRequest(core.actionObject):
-        def init(self, target, segmentTime, absoluteMove = False, sync = False ):
+        def init(self, target, segmentTime, absoluteMove = False):
             segmentKey = self.virtualNode.motionSegmentBuffer.newKey() #pull a new segment key
-            self.setPacket(stepper1_target = target, segmentTime = segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[sync])
+            self.segmentTime = segmentTime
             
+            #set the outgoing packet, based on the information avaliable now.
+            self.setPacket(stepper1_target = target, segmentTime = self.segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[self.isSync()])
+            
+            if not self.isSync(): #not a synchronized move, so make it happen now.
+                return self.sendMotionSegment()
+            else: #synchronized move.
+                pass #we're going to do everything in separate methods at the right time.
+        
+        def onSyncPush(self):
+            """Push synchronizing parameters to the sync token."""
+            self.syncToken.push(segmentTime = self.segmentTime) #push the segment move time
+        
+        def onSyncPull(self):
+            """Pull synchronizing parameters from the sync token."""
+            maxSegmentTime = self.syncToken.pullMaxValue('segmentTime')
+            self.setPacket(segmentTime = maxSegmentTime) #make sure that all synchronized nodes are using the same segment time
+        
+        def onChannelAccess(self):
+            """Runs when actionObject receives access to the communication channel."""
+            if self.isSync(): #don't want to send twice if not a synchronized move.
+                self.sendMotionSegment()
+        
+        def sendMotionSegment(self):
+            """Sends a motion segment to the node."""
             while True: #make sure the motion segment is loaded into the buffer
-                if self.transmitUntilResponse(releaseChannelOnTransmit = False): #may need to transmit multiple times, so don't release channel automatically
+                if self.transmitUntilResponse(releaseChannelOnTransmit = False): #may need to transmit multiple times if buffer is full, so don't release channel automatically
                     response = self.getPacket()
-                    print response
                     if response['statusCode']: #segment was loaded
                         self.releaseChannel() #Done; release the communications channel
                         break
                     else: #buffer was full
                         timeUntilSlotAvailable = self.virtualNode.stepGenPeriod * response['timeRemaining']
-                        print str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s"
+                        notice(self, "MOVE " + str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s")
                         time.sleep(timeUntilSlotAvailable)
                 else:
                     notice(self.virtualNode, 'Unable to send motion segment!')
-                    return False
-                
+                    return False            
+                 
         def synthetic(self, stepper1_target, segmentTime, segmentKey, absoluteMove, sync):
             if(len(self.virtualNode.syntheticMotionBuffer)<= self.virtualNode.motionBufferSize): #space available in buffer
                 self.virtualNode.syntheticMotionBuffer.appendleft({'stepper1_target':stepper1_target, 'segmentTime':segmentTime, 'segmentKey': segmentKey,
@@ -307,22 +330,35 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
 
 # TEST CODE HERE
 if __name__ == "__main__":
-#     config.syntheticModeOn()
+    config.syntheticModeOn()
 #     config.verboseDebugOn()
-    stepperNode = virtualNode()
+    stepperNode1 = virtualNode()
+    stepperNode2 = virtualNode(interface = stepperNode1._interface_)
     time.sleep(0.5)
+    
+#     syncToken = core.syncToken()
+#     syncToken.push(hello = 5, goodbye = 3)
+#     syncToken.push(goodbye = 8)
+#     print syncToken.pullMaxValue('goodbye')
+#     print syncToken.pullMinValue('goodbye')
+#     exit()
+#     stepperNode.setMotorCurrent(0.67)
     position = 0
-    for i in range(30):
-        stepperNode.stepRequest(i*25, i*25*16, sync = i%2)
-        position += i*25
+    for i in reversed(range(70)):
+#         stepperNode.stepRequest(i*25, i*25*128, sync = i%2)
+#         stepperNode.stepRequest(i*25, i*25*32, sync = True)
+        stepperNode1.stepRequest(2, 2*16, sync = False)
+        stepperNode2.stepRequest(2, 2*16, sync = False)
+        position += 2
     time.sleep(1)
-    for i in range(15):
-        syncRequest = stepperNode.syncRequest()
-        syncRequest.commit()
-        syncRequest.clearForRelease()
-        time.sleep(0.25)
+#     for i in range(10):
+#         syncRequest = stepperNode1.syncRequest()
+#         syncRequest.commit()
+#         syncRequest.clearForRelease()
+#         print "SYNC"
+#         time.sleep(6)
     print "--- TARGET POSITION: " + str(position)
     while True:
-        print stepperNode.getPositionRequest()
+        print stepperNode1.getPositionRequest()
         time.sleep(0.25)      
         

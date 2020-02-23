@@ -62,8 +62,6 @@ class actionObject(object):
         returnValue = newActionObject.init(*args, **kwargs) # calls the user-defined initialization routine, this time 
                                                             # with any provided arguments.
         
-        if sync: newActionObject.onSyncPush() #gives nodes the chance to publish synchronizing information
-        
         if returnValue == None:     #if the user initialization doesn't return anything, then return the actionObject
             return newActionObject
         else:                       #otherwise pass along whatever the user has provided
@@ -77,7 +75,7 @@ class actionObject(object):
         Note that no other arguments are provided because user-supplied arguments are handled strictly by the subclass's init() method.
         """
         
-        self._syncToken_ = sync
+        self.syncToken = sync
         self._outboundPacketDictionary_ = {}    #stores key:value pairs to be encoded by _encodeOutboundPacket_
         self._inboundPacketDictionary_ = {} #stores key:value pairs decoded by _decodeAndSetInboundPacket_
         
@@ -98,7 +96,7 @@ class actionObject(object):
     
     def isSync(self):
         """Returns True if this actionObject is being synchronized, or False if not."""
-        if self._syncToken_:
+        if self.syncToken:
             return True
         else:
             return False
@@ -109,7 +107,7 @@ class actionObject(object):
         Synchronization may require that all nodes have access to certain shared information. Here is when a node has the chance to publish
         this shared information.
         
-        This method is called after the user initialization init(), but only if a sync token is provided. If used, this method should be overridden by the user.
+        This method is called after all of the synchronized nodes have been instantiated. If used, this method should be overridden by the user.
         """
         pass
     
@@ -119,7 +117,7 @@ class actionObject(object):
         Synchronization may require that all nodes have access to certain shared information. Here is when a node has the chance to act on this
         information, once all nodes have published.
         
-        This method is called after all of the nodes in an actionSet have been instantiated. If used, this method should be overridden by the user.
+        This method is called after all of the synchronized nodes have pushed to the syncToken. If used, this method should be overridden by the user.
         """
         pass
         
@@ -155,7 +153,7 @@ class actionObject(object):
         self._committedFlag_ = True     #record that actionObject has been committed
         self.virtualNode._interface_.commit(self)
         return True
- 
+        
     def _isCommitted_(self):
         """Returns committedFlag, indicating that this actionObject has been committed to the channel priority queue."""
         return self._committedFlag_
@@ -189,7 +187,12 @@ class actionObject(object):
         return self._channelAccessGrantedFlag_.is_set()
     
     def onChannelAccess(self):
-        """User-overrridden optional method that gets called when the node receives channel access."""
+        """User-overrridden optional method that gets called when the node receives channel access.
+        
+        The common use pattern is to override this method for synchronized actionObjects to perform a transmission later rather than at
+        init(). HOWEVER, the user must be aware that this method is called automatically whenever an actionObject receives channel access, 
+        and that there is a risk of performing the same action twice if you perform it once in init() and then again here.
+        """
         pass
         
     def waitForChannelAccess(self, timeout = None):
@@ -374,12 +377,68 @@ class actionSet(object):
     Note: it is currently required that all contained actionObjects are on the same interface.
     """
     
-    def __init__(self, *actionMolecules):
+    def __init__(self, *actionMolecules, **kwargs):
         """Initializes the actionSet.
         
         actionMolecules -- all objects provided positional arguments will be treated as members of the actionSet.
+        kwargs -- control parameters provided as keyword arguments:
+            interface -- a common interface between all constituent actionMolecules
+            external -- specifies whether the actionSet will be externally committed to the channel priority queue, and then released to the
+                        channel access queue. If False, these will be done automatically.
         """
-        self.actionMolecules = list(actionMolecules)
+        self.actionMolecules = list(actionMolecules) #stores all actionObjects or actionSequences
+        self._interface_ = kwargs['interface']
+        self._external_ = kwargs['external']
+        
+        
+        self._committedFlag_ = False #Indicates that the actionSet has been committed to the channel priority queue
+        self._clearForReleaseFlag_ = threading.Event()  #Indicates that the actionSet can be released from the channel priority queue and 
+                                                        #its constituents await transmission
+        # -- push and pull synchronization parameters --
+        for actionMolecule in self.actionMolecules:
+            actionMolecule.onSyncPush()
+            
+        for actionMolecule in self.actionMolecules:
+            actionMolecule.onSyncPull()
+        
+        # automatically commit actionSet if not externally controlled
+        if not self._external_:
+            if not self._isCommitted_():    #check if actionSet is already committed
+                self.commit()   #commit actionSet to channel priority queue
+            if not self._isClearForRelease_():   #check if actionSet is cleared for release from the channel priority queue
+                self.clearForRelease()  #clear actionSet for release from the channel priority queue
+
+            
+    def commit(self):
+        """Places this actionSet in its interface's channel priority queue."""
+        
+        # sets the commmited flag for each actionMolecule. We do this to prevent the actionObjects from automatically committing themselves on transmit.
+        for actionMolecule in self.actionMolecules:
+            actionMolecule._committedFlag_ == True
+        
+        self._committedFlag_ = True     #record that actionSet has been committed
+        self._interface_.commit(self)
+        return True
+ 
+    def _isCommitted_(self):
+        """Returns committedFlag, indicating that this actionSet has been committed to the channel priority queue."""
+        return self._committedFlag_
+    
+    def clearForRelease(self):
+        """Flags the actionSet as clear to release from the channel priority queue.
+        
+        Note that the actual release procedure is performed by the channel priority thread.
+        """
+        # clear each constituent actionMolecule for release
+        for actionMolecule in self.actionMolecules:
+            actionMolecule._committedFlag_ == True
+            
+        self._clearForReleaseFlag_.set() #set the clear to release flag
+        return True
+    
+    def _isClearForRelease_(self):
+        """Returns True if the actionSet has been cleared for release from the channel priority queue."""
+        return self._clearForReleaseFlag_.is_set()        
     
     def __str__(self):
         return object.__str__(self) + " CONTAINING: " + str([actionMolecule for actionMolecule in self.actionMolecules])
@@ -426,12 +485,13 @@ class syncToken(object):
         return min(values)
         
 
-def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *arguments, **keywordArguments):
+def distributedFunctionCall(owner, targetList, attribute, commonInterface, syncTokenType, *arguments, **keywordArguments):
     """Distributes a function call across a list of target objects.
     
     owner -- A reference to the initiating object. This is used for providing notices.
     targetList -- a list of target objects across which the function call will be distributed
     attribute -- the attribute name that should be called
+    commonInterface -- the common interface object shared by all targets, or False if there isn't a common interface
     syncTokenType -- A reference to a token class that should be used for synchronization IN THE EVENT THAT THERE ARE UNIQUELY
                      DISTRIBUTED ARGUMENTS, or False or None if no synchronization tokens are to be injected.
     arguments -- positional arguments to be forwarded on to the targets. Any tuples will be uniquely distributed based on
@@ -460,9 +520,10 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     None or False can be provided as the syncTokenType instead.
     
     This function returns either a concatenated tuple corresponding to the return values of each call, OR an actionSet. An actionSet will be 
-    returned if synchronization has been attempted AND all returned types are either an actionObject or an actionSequence. Synchronization
-    will only be attempted if a syncTokenType is provided, sync is not explicitly blocked by a reserved keyword argument, AND either there
-    are uniquely distributed arguments OR synchronization is explicitly forced by a reserved keyword argument.
+    returned if synchronization has been attempted, a common interface is present across all targets, AND all returned types are either an 
+    actionObject or an actionSequence. Synchronization will only be attempted if a syncTokenType is provided, sync is not explicitly blocked 
+    by a reserved keyword argument, AND either there are uniquely distributed arguments OR synchronization is explicitly forced by a reserved 
+    keyword argument.
     
     If an error occurs, returns False instead.
     """
@@ -522,15 +583,19 @@ def distributedFunctionCall(owner, targetList, attribute, syncTokenType, *argume
     if (uniqueDistribution or forceSync) and syncTokenType and not blockSync: #unique distribution has occured or synchronization is forced, a sync token type is avaliable, and sync is not explicitly blocked
         syncToken = syncTokenType() #generate a new syncronization token
         for keywordDictionary in collectedKeywordArguments: keywordDictionary.update({'sync':syncToken}) #updates all kwarg dictionaries
-    
+        if not commonInterface: 
+            print "WARNING: SYNCHRONIZATION PERFORMED ACROSS MULTIPLE INTERFACES. STRANGE THINGS MIGHT HAPPEN (OR NOT HAPPEN)."
+    else:
+        syncToken = False
+        
     #-- Function Calls --
     returnTuple = tuple([callFunctionWithChecking(owner, target, attribute, *args, **kwargs) for target, args, kwargs in zip(targetList, collectedArguments, collectedKeywordArguments)])
     
     #-- Return Values --
-    allAreActionMolecules = all([(type(element) == actionObject or type(element) == actionSequence) for element in returnTuple]) #True if all elements are action molecules (i.e. actionObjects or actionSequences)
+    allAreActionMolecules = all([(isinstance(element, actionObject) or isinstance(element, actionSequence)) for element in returnTuple]) #True if all elements are action molecules (i.e. actionObjects or actionSequences)
     
-    if uniqueDistribution and syncTokenType and allAreActionMolecules: #return as an actionSet
-        return actionSet(*returnTuple)
+    if uniqueDistribution and syncTokenType and allAreActionMolecules and commonInterface: #return as an actionSet
+        return actionSet(*returnTuple, interface = commonInterface, external = external) #creates an actionSet, and provides external to control whether it automatically commits and releases
     else:
         return returnTuple
     

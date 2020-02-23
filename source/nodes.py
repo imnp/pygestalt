@@ -1160,7 +1160,7 @@ class compoundNode(object):
         else:
             syncToken = False
         
-        return functools.partial(core.distributedFunctionCall, self, self._nodes_, attribute, syncToken) #distributedFunctionCall(owner, targetList, attribute, syncTokenType, *arguments, **keywordArguments)
+        return functools.partial(core.distributedFunctionCall, self, self._nodes_, attribute, self._interface_, syncToken) #distributedFunctionCall(owner, targetList, attribute, commonInterface, syncTokenType, *arguments, **keywordArguments)
     
     def _validateInterfaceConsistency_(self):
         """Tests whether all constituent nodes share a common interface.
@@ -1197,7 +1197,7 @@ class compoundNode(object):
         """
         if hasattr(node, attribute): #first check that node actually has the requested attribute
             target = getattr(node, attribute)
-            if type(target) == core.actionObject: #actionObject, so return True by default
+            if issubclass(target, core.actionObject): #actionObject type, so return True by default
                 return True
             elif inspect.isfunction(target) or inspect.ismethod(target): #function, need to check if it accepts sync, either explicitly or as **kwargs
                 args, varargs, keywords, defaults = inspect.getargspec(target)
