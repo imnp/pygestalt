@@ -62,6 +62,10 @@ class virtualMachine(object):
         pass
     
     def defaultInterface(self):
+        """ User-overridden function to provide a default interface for the virtual machine.
+        
+        This supports the ability to share interfaces with multiple virtual machines.
+        """
         return None
     
     def initNodes(self):

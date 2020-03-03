@@ -678,7 +678,23 @@ class gestaltInterface(baseInterface):
             and synchronized packet execution. This function breaks apart these structures and serializes the contained
             actionObjects into the sequence in which they should be transmitted over the channel.
             """
-            return [actionMolecule]   #for now nothing fancy, assume only actionObjects are used.
+            if isinstance(actionMolecule, core.actionSet): #actionSet
+                # -- Get all actionObjects in the actionSet. Note that currently we don't support actionSequences.
+                actionObjectSequence = actionMolecule.getActionMolecules() #all of the contained actionObjects in the actionSet.
+
+                # -- Generate a synchronization actionObject using the virtual node of the first actionObject in the actionSet.
+                # Note that we're going to inject this at the end of the sequence, to trigger synchronization for the actionSet.
+                syncActionObject = actionObjectSequence[0].virtualNode.syncRequest() #this is not very clean, but it works for now.
+                syncActionObject.commit(external = True) #mark the synchronization actionObject as already committed.
+                syncActionObject.clearForRelease() #release the actionObject
+                actionObjectSequence += [syncActionObject]
+                return actionObjectSequence
+                
+            elif isinstance(actionMolecule, core.actionObject): #actionObject
+                return [actionMolecule]
+            else: #unsupported
+                notice(self, "Unable to serialize type " + str(type(actionMolecule)))
+                return False
     
     def commit(self, actionMolecule):
         """Adds the provided actionMolecule to the channelPriorityQueue

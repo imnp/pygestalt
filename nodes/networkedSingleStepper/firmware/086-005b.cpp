@@ -72,7 +72,7 @@ void stepper1_reverse();
 #define gestaltPort_getStatus		15	// returns the current node status
 
 //  ----- STEPPING PARAMETERS -----
-#define defaultHardwareMicrostepping		3	// 0b00: Full, 0b01: Half, 0b10: Quarter, 0b11: Sixteenth
+#define defaultHardwareMicrostepping		3	// 0b00: Full, 0b01: Half, 0b10: Quarter, 0b11: Sixteenth -- NOTE: this is set manually on a per-bit basis in userSetup()
 #define smoothingMicrosteppingBits			2   // The number of bits of microstepping used purely for smoothing. The positioning step resolution is quarter-steps.
 #define numberOfSteppersOnNode				1 	// Only one stepper on the node
 
@@ -112,7 +112,7 @@ struct motionSegment{ //11 bytes
 const uint8_t motionBuffer_length = 48;  //528 bytes, on an atmega32x total memory is 2K. This is approximately 0.75 seconds of move data with one node on network.
 volatile struct motionSegment motionBuffer[motionBuffer_length];  //stores all buffered moves
 
-//  CIRCULAR BUFFER INDEXES
+//  ----- CIRCULAR BUFFER INDEXES -----
 //  When a new packet comes in, the write buffer position gets incremented and then that location is written to.
 //  The main process detects that the write buffer is ahead of the read buffer, and increments the read buffer position
 //  and then reads that location into the step generator.
@@ -158,7 +158,7 @@ void userSetup(){
 
 	// -- CONFIGURE STEPPER IO --
 	stepper1_DDR |= (1<<stepper1_Step)|(1<<stepper1_Direction)|(1<<stepper1_Reset)|(1<<stepper1_MS1)|(1<<stepper1_MS0)|(1<<stepper1_Enable);  //set all motor pins to outputs
-	stepper1_PORT |= (1<<stepper1_Reset)|(1<<stepper1_Enable)|(defaultHardwareMicrostepping<<stepper1_MS0); //start with motor disabled, not in reset, 1/16 stepping
+	stepper1_PORT |= (1<<stepper1_Reset)|(1<<stepper1_Enable)|(1<<stepper1_MS0)|(1<<stepper1_MS1); //start with motor disabled, not in reset, 1/16 stepping
 	stepper1_PORT &= ~(1<<stepper1_Direction)|(1<<stepper1_Step); //dir in reverse, step low, (note ~)
 
 	// -- CONFIGURE TIMER1 FOR STEP GENERATION --
@@ -464,10 +464,8 @@ void svc_enableDrivers(){
 }
 
 void svc_stepRequest(){
-	ledOn();
 	uint8_t success = loadSegmentIntoMotionBuffer(); //0 if buffer is full, 1 if successful
 	transmitStatus(gestaltPort_stepRequest, success);
-	ledOff();
 }
 
 void svc_getPosition(){
@@ -533,7 +531,6 @@ void userPacketRouter(uint8_t destinationPort){
 
 //  ----- STEP GENERATOR INTERRUPT ROUTINE -----
 ISR(TIMER1_COMPA_vect){
-//	PORTB |= (1<<PB4); //TEST -- set MISO LOW on exit
 	if(activeSegment_timeRemaining > 0){ //something to do!
 		activeSegment_timeRemaining --; //decrement time remaining
 
@@ -556,5 +553,4 @@ ISR(TIMER1_COMPA_vect){
 			enableAllDrivers();
 		}
 	}
-//	PORTB &= ~(1<<PB4); // TEST -- set MISO LOW on exit
 }

@@ -148,12 +148,17 @@ class actionObject(object):
         self._inboundPacketDictionary_ = self._inboundTemplate_.decode(serializedPacket)[0]    #decodes serializedPacket using _inboundTemplate_
         return True
 
-    def commit(self):
-        """Places this actionObject in its virtualNode interface's channel priority queue."""
-        self._committedFlag_ = True     #record that actionObject has been committed
-        self.virtualNode._interface_.commit(self)
-        return True
+    def commit(self, external = False):
+        """Places this actionObject in its virtualNode interface's channel priority queue.
         
+        external -- indicates that the actionObject will be placed in the channel priority queue by an external function. If True,
+                    this method will simply set the committedFlag, but will not actually commit the actionObject to the channel priority queue.
+        """
+        self._committedFlag_ = True     #record that actionObject has been committed
+        if not external:
+            self.virtualNode._interface_.commit(self)
+        return True
+    
     def _isCommitted_(self):
         """Returns committedFlag, indicating that this actionObject has been committed to the channel priority queue."""
         return self._committedFlag_
@@ -407,14 +412,13 @@ class actionSet(object):
                 self.commit()   #commit actionSet to channel priority queue
             if not self._isClearForRelease_():   #check if actionSet is cleared for release from the channel priority queue
                 self.clearForRelease()  #clear actionSet for release from the channel priority queue
-
             
     def commit(self):
         """Places this actionSet in its interface's channel priority queue."""
         
         # sets the commmited flag for each actionMolecule. We do this to prevent the actionObjects from automatically committing themselves on transmit.
         for actionMolecule in self.actionMolecules:
-            actionMolecule._committedFlag_ == True
+            actionMolecule.commit(external = True) #sets the committed flag without actually placing the actionMolecule in the channel priority queue.
         
         self._committedFlag_ = True     #record that actionSet has been committed
         self._interface_.commit(self)
@@ -431,7 +435,7 @@ class actionSet(object):
         """
         # clear each constituent actionMolecule for release
         for actionMolecule in self.actionMolecules:
-            actionMolecule._committedFlag_ == True
+            actionMolecule.clearForRelease()
             
         self._clearForReleaseFlag_.set() #set the clear to release flag
         return True
@@ -439,7 +443,11 @@ class actionSet(object):
     def _isClearForRelease_(self):
         """Returns True if the actionSet has been cleared for release from the channel priority queue."""
         return self._clearForReleaseFlag_.is_set()        
-    
+
+    def getActionMolecules(self):
+        """Returns a list of all contained actionMolecules"""
+        return self.actionMolecules
+        
     def __str__(self):
         return object.__str__(self) + " CONTAINING: " + str([actionMolecule for actionMolecule in self.actionMolecules])
 

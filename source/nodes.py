@@ -743,6 +743,7 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
     
     class syncRequest(core.actionObject):
         """Initiates synchronized behavior across multiple networked nodes."""
+        
         def onChannelAccess(self):
             """Transmits a packet when granted access to the interface channel."""
             self.transmit(mode = 'multicast')   #transmit multicast, no reply expected.
