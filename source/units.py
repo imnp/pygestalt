@@ -539,8 +539,18 @@ def convertToUnits(sourceNumber, targetUnits, strict = False):
     else:
         raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")        
     
-
+def applyDefaultUnits(value, defaultUnits):
+    """Applies default units to a value if not already a dFloat.
     
+    value -- the value to be checked. If a dFloat object is provided, no change will be performed
+    defaultUnits -- the unit type to be applied
+    
+    Returns a dFloat, either as provided, or with default units.
+    """
+    if type(value) == dFloat:
+        return value #already a dFloat, no need to convert
+    else:
+        return defaultUnits*value #multiplying is the safest way to do this, because it works with compound units (e.g. px/inch)
     
 #-- STANDARD UNITS --
 
@@ -581,3 +591,4 @@ A = unit('A', 'amp')
 # pseudo-units
 # these units are just to make it easier to keep track of transformations thru the system, and are not necessarily SI units
 step = unit('step', 'step') #steps are base units
+px = unit('px', 'pixels') #pixels are base units
