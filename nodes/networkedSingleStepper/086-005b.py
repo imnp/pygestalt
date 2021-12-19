@@ -29,6 +29,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.clockFrequency = 18432000.0 #1/s, crystal clock frequency
         self.stepGenTimeBase = 1152.0 #number of system clock ticks per step interrupt
         self.stepGenPeriod = float(self.stepGenTimeBase) / self.clockFrequency #the time per step gen interrupts, in seconds
+        self.stepGenUnits = units.unit("tks", "ticks", units.s, 1.0/self.stepGenPeriod) #used for converting between step generator units and seconds
         
         # AXES
         self.size = 1 #number of axes
@@ -42,7 +43,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.syntheticMotorCurrentReferenceVoltage = 0 #this is set to match the current request inside setMotorCurrent()
         self.syntheticMotorEnableFlag = 0 #tracks whether the motor is enabled when in synthetic mode.
         self.syntheticCurrentKey = 0
-        self.syntheticTimeRemaining = 0
+        self.syntheticTicksRemaining = 0
         self.syntheticReadPosition = 0
         self.syntheticWritePosition = 0
         self.syntheticStepperPositions = [0 for i in range(self.size)]
@@ -68,7 +69,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         
         self.stepRequestPacket = packets.template('stepRequest',
                                                   packets.fixedPoint('stepper1_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
-                                                  packets.unsignedInt('segmentTime', 3), #24-bit unsigned. The move time in units of 62.5us.
+                                                  packets.unsignedInt('segmentTicks', 3), #24-bit unsigned. The move time in units of 62.5us.
                                                   packets.unsignedInt('segmentKey', 1), #a rolling key counter that helps to identify the active segment on the node 
                                                   packets.unsignedInt('absoluteMove', 1), #0: relative move, 1: absolute move
                                                   packets.unsignedInt('sync', 1)) #synchronized move if non-zero
@@ -80,7 +81,7 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         self.stepStatusResponsePacket = packets.template('stepStatusResponse',
                                                  packets.unsignedInt('statusCode', 1), #1 if a move is queued successfully, 0 if buffer is full.
                                                  packets.unsignedInt('currentKey', 1), #key of current motion segment
-                                                 packets.unsignedInt('timeRemaining', 3), #segment time remaining, in units of 62.5us
+                                                 packets.unsignedInt('ticksRemaining', 3), #segment time remaining, in units of 62.5us
                                                  packets.unsignedInt('readPosition', 1), #position of the read head
                                                  packets.unsignedInt('writePosition', 1)) #position of the write head
         
@@ -211,11 +212,21 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
     
     class stepRequest(core.actionObject):
         def init(self, target, segmentTime, absoluteMove = False):
+            """Steps to a relative or absolute target in a given amount of time.
+            
+            target -- the target number of steps (if relative), or the target position (if absolute)
+            segmentTime -- the requested duration of the motion segment, in seconds.
+            absoluteMove -- if True, the target is an absolute position. If False, the target is a relative number of steps (including a sign).
+            """
+            
             segmentKey = self.virtualNode.motionSegmentBuffer.newKey() #pull a new segment key
-            self.segmentTime = segmentTime
+            
+            self.segmentTicks = self.virtualNode.stepGenUnits(units.s(segmentTime)) #the actual move time, in ticks
+            self.segmentTime = units.s(self.segmentTicks) #the actual move time, in seconds
             
             #set the outgoing packet, based on the information avaliable now.
-            self.setPacket(stepper1_target = target, segmentTime = self.segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[self.isSync()])
+            self.setPacket(stepper1_target = target, segmentTicks = self.segmentTicks, 
+                           segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[self.isSync()])
             
             if not self.isSync(): #not a synchronized move, so make it happen now.
                 return self.sendMotionSegment()
@@ -224,12 +235,18 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
         
         def onSyncPush(self):
             """Push synchronizing parameters to the sync token."""
-            self.syncToken.push(segmentTime = self.segmentTime) #push the segment move time
+            self.syncToken.push(segmentTime = self.segmentTime) # push the ACTUAL segment move time. Note that this will be a multiple of the step gen time,
+                                                                # because it is calculated as such in init(). This is important for detecting incompatible
+                                                                # step gen periods between nodes. 
         
         def onSyncPull(self):
             """Pull synchronizing parameters from the sync token."""
             maxSegmentTime = self.syncToken.pullMaxValue('segmentTime')
-            self.setPacket(segmentTime = maxSegmentTime) #make sure that all synchronized nodes are using the same segment time
+            segmentTicks = self.virtualNode.stepGenUnits(maxSegmentTime)
+            actualSegmentTime = units.s(segmentTicks)
+            if actualSegmentTime != maxSegmentTime:
+                notice(self.virtualNode, "WARNING: INCOMPATIBLE STEP GENERATOR TIME BASES DETECTED DURING SYNCHRONIZATION.")
+            self.setPacket(segmentTicks = segmentTicks) #make sure that all synchronized nodes are using the same segment time
         
         def onChannelAccess(self):
             """Runs when actionObject receives access to the communication channel."""
@@ -245,27 +262,28 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                         self.releaseChannel() #Done; release the communications channel
                         break
                     else: #buffer was full
-                        timeUntilSlotAvailable = self.virtualNode.stepGenPeriod * response['timeRemaining']
-                        notice(self, "MOVE " + str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s")
+                        timeUntilSlotAvailable = units.s(self.virtualNode.stepGenUnits(response['ticksRemaining']))
+                        notice(self, "MOVE " + str(response['currentKey']) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable))
                         time.sleep(timeUntilSlotAvailable)
                 else:
                     notice(self.virtualNode, 'Unable to send motion segment!')
                     return False            
                  
-        def synthetic(self, stepper1_target, segmentTime, segmentKey, absoluteMove, sync):
+        def synthetic(self, stepper1_target, segmentTicks, segmentKey, absoluteMove, sync):
             if(len(self.virtualNode.syntheticMotionBuffer)<= self.virtualNode.motionBufferSize): #space available in buffer
-                self.virtualNode.syntheticMotionBuffer.appendleft({'stepper1_target':stepper1_target, 'segmentTime':segmentTime, 'segmentKey': segmentKey,
+                self.virtualNode.syntheticMotionBuffer.appendleft({'stepper1_target':stepper1_target, 'segmentTicks':segmentTicks, 'segmentKey': segmentKey,
                                                                    'absoluteMove':absoluteMove, 'sync':sync})
                 self.virtualNode.syntheticWritePosition += 1
                 if(self.virtualNode.syntheticWritePosition == self.virtualNode.motionBufferSize):
                     self.virtualNode.syntheticWritePosition = 0
-                return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
+                return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'ticksRemaining': self.virtualNode.syntheticTicksRemaining, 
                         'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
             else:
-                return {'statusCode':0, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
+                return {'statusCode':0, 'currentKey': self.virtualNode.syntheticCurrentKey, 'ticksRemaining': self.virtualNode.syntheticTicksRemaining, 
                         'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}            
 
     class getPositionRequest(core.actionObject):
+        """Returns the absolute position of the stepper motor."""
         def init(self):
             if self.transmitUntilResponse():
                 return self.getPacket()['stepper1_absolutePosition']
@@ -274,7 +292,6 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                 return False  
 
         def synthetic(self):
-            print self.virtualNode.syntheticStepperPositions[0]
             return {'stepper1_absolutePosition':self.virtualNode.syntheticStepperPositions[0]}
                        
             
@@ -286,18 +303,20 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                 statusCode -- will always read 1 to a spinStatusRequest. In the context of the response to a spin request, indicates whether the move was queued successfully.
                 currentKey -- Each motion segment is assigned a sequential ID to confirm nothing has been lost. This will return the key of the motion segment currently
                               under the buffer read head.
-                timeRemaining -- The time remaining in the current move, in step generator ticks (currently 62.5us).
+                timeRemaining -- The time remaining in the current move, in seconds.
                 readPosition -- The current position of the read head, which is the buffer location that was last read.
                 writePosition -- The current position of the write head, which is the buffer location that was last written.
             """
             if self.transmitUntilResponse():
-                return self.getPacket()
+                response = self.getPacket()
+                response.update({'timeRemaining':units.s(self.virtualNode.stepGenUnits(response.pop('ticksRemaining')))}) #convert time remaining into seconds
+                return response
             else:
                 notice(self.virtualNode, 'Unable to get spin status!')
                 return False
         
         def synthetic(self):
-            return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'timeRemaining': self.virtualNode.syntheticTimeRemaining, 
+            return {'statusCode':1, 'currentKey': self.virtualNode.syntheticCurrentKey, 'ticksRemaining': self.virtualNode.syntheticTicksRemaining, 
                     'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}
 
     def syntheticSync(self):
@@ -315,11 +334,11 @@ class virtualNode(nodes.networkedGestaltVirtualNode): #this is a networked Gesta
                 if(syntheticMotionBuffer[-1]['sync'] == 0): #OK to load move
                     currentMove = syntheticMotionBuffer.pop()
                     virtualNode.syntheticCurrentKey = currentMove['segmentKey']
-                    virtualNode.syntheticTimeRemaining = currentMove['segmentTime']
+                    virtualNode.syntheticTicksRemaining = currentMove['segmentTicks']
                     virtualNode.syntheticReadPosition += 1
                     if(virtualNode.syntheticReadPosition == virtualNode.motionBufferSize):
                         virtualNode.syntheticReadPosition = 0
-                    time.sleep(virtualNode.syntheticTimeRemaining*virtualNode.stepGenPeriod)
+                    time.sleep(units.s(self.stepGenUnits(virtualNode.syntheticTicksRemaining)))
                     if(currentMove['absoluteMove']):
                         relativeMotion = currentMove['stepper1_target'] - virtualNode.syntheticStepperPositions[0]
                     else:
@@ -344,18 +363,18 @@ if __name__ == "__main__":
 #     exit()
 #     stepperNode.setMotorCurrent(0.67)
     position = 0
-    for i in reversed(range(70)):
+    for i in range(10):
 #         stepperNode.stepRequest(i*25, i*25*128, sync = i%2)
 #         stepperNode.stepRequest(i*25, i*25*32, sync = True)
-        stepperNode1.stepRequest(2, 2*16, sync = False)
-        stepperNode2.stepRequest(2, 2*16, sync = False)
+        stepperNode1.stepRequest(2, 24*16*0.0000625, sync = True)
+        stepperNode2.stepRequest(2, 24*16*0.0000625, sync = True)
         position += 2
     time.sleep(1)
-#     for i in range(10):
-#         syncRequest = stepperNode1.syncRequest()
-#         syncRequest.commit()
-#         syncRequest.clearForRelease()
-#         print "SYNC"
+    for i in range(10):
+        syncRequest = stepperNode1.syncRequest()
+        syncRequest.commit()
+        syncRequest.clearForRelease()
+        print "SYNC"
 #         time.sleep(6)
     print "--- TARGET POSITION: " + str(position)
     while True:

@@ -47,14 +47,14 @@ class virtualMachine(machines.virtualMachine):
     
 
 if __name__ == "__main__":
-#     config.syntheticModeOn()
+    config.syntheticModeOn()
 #     config.verboseDebugOn()
     myVirtualMachine = virtualMachine()
 #     myVirtualMachine.compoundNode.setMotorCurrent((1.0, 1.2))
-    myVirtualMachine.compoundNode.stepRequest((100,200), 200*256)
-    myVirtualMachine.compoundNode.stepRequest((-100,-200), 200*256)
+    myVirtualMachine.compoundNode.stepRequest((100,200), 2)
+    myVirtualMachine.compoundNode.stepRequest((-100,-200), 2)
     while True:
         print myVirtualMachine.compoundNode.getPositionRequest()
-        time.sleep(1)
+        time.sleep(0.1)
 #     myVirtualMachine.compoundNode.loadProgram('firmware/086-005b.hex')
     time.sleep(0.5)

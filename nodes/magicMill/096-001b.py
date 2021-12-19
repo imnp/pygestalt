@@ -39,12 +39,13 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
         self.clockFrequency = 18432000.0 #1/s, crystal clock frequency
         self.stepGenTimeBase = 1152.0 #number of system clock ticks per step interrupt
         self.stepGenPeriod = float(self.stepGenTimeBase) / self.clockFrequency #the time per step gen interrupts, in seconds
+        self.stepGenUnits = units.unit("tks", "ticks", units.s, 1.0/self.stepGenPeriod) #used for converting between step generator units and seconds
         
         # AXES
         self.size = 3 #number of axes
         
         # MOTION BUFFER AND KEYS
-        self.motionBufferSize = 48
+        self.motionBufferSize = 32
         self.motionSegmentBuffer = self.motionSegmentManager(motionKeyMax = 255, bufferSize = self.motionBufferSize)
         
         
@@ -80,15 +81,18 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
                                                     packets.unsignedInt('enable', 1))
         
         self.stepRequestPacket = packets.template('stepRequest',
-                                                  packets.fixedPoint('stepper1_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.fixedPoint('stepperA_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.fixedPoint('stepperB_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.fixedPoint('stepperC_target', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
                                                   packets.unsignedInt('segmentTime', 3), #24-bit unsigned. The move time in units of 62.5us.
                                                   packets.unsignedInt('segmentKey', 1), #a rolling key counter that helps to identify the active segment on the node 
                                                   packets.unsignedInt('absoluteMove', 1), #0: relative move, 1: absolute move
                                                   packets.unsignedInt('sync', 1)) #synchronized move if non-zero
         
         self.positionResponsePacket = packets.template('positionResponse',
-                                                  packets.fixedPoint('stepper1_absolutePosition', 22, 2)) #24-bit total, 2 fractional step bits (1/4 steps).
-
+                                                  packets.fixedPoint('stepperA_absolutePosition', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.fixedPoint('stepperB_absolutePosition', 22, 2), #24-bit total, 2 fractional step bits (1/4 steps).
+                                                  packets.fixedPoint('stepperC_absolutePosition', 22, 2)) #24-bit total, 2 fractional step bits (1/4 steps).
         
         self.stepStatusResponsePacket = packets.template('stepStatusResponse',
                                                  packets.unsignedInt('statusCode', 1), #1 if a move is queued successfully, 0 if buffer is full.
@@ -191,7 +195,6 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
             actualVoltage = (potentiometerValue * self.virtualNode.maxReferenceVoltage) / self.virtualNode.potentiometerSteps
             
             self.setPacket(axis = axis, value = voltage)
-            
             if self.transmitUntilResponse():
                 status = self.getPacket()['status'] #the response status
                 if status == 0: #load was successful, so return the actual voltage that was set
@@ -239,12 +242,21 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
             return {}   
     
     class stepRequest(core.actionObject):
-        def init(self, target, segmentTime, absoluteMove = False):
+        def init(self, targets, segmentTime, absoluteMove = False):
+            """Steps to a relative or absolute target in a given amount of time.
+            
+            targets -- a tuple containing for each axis the target number of steps (if relative), or the target position (if absolute).
+                        Format is (stepperA, stepperB, stepperC)
+            segmentTime -- the duration of the motion segment, in seconds.
+            absoluteMove -- if True, the target is an absolute position. If False, the target is a relative number of steps (including a sign).
+            """
+            
             segmentKey = self.virtualNode.motionSegmentBuffer.newKey() #pull a new segment key
             self.segmentTime = segmentTime
             
             #set the outgoing packet, based on the information avaliable now.
-            self.setPacket(stepper1_target = target, segmentTime = self.segmentTime, segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[self.isSync()])
+            self.setPacket(stepper1_target = target, segmentTime = self.virtualNode.stepGenUnits(units.s(self.segmentTime)), 
+                           segmentKey = segmentKey, absoluteMove = {False:0, True:1}[absoluteMove], sync = {False:0, True:1}[self.isSync()])
             
             if not self.isSync(): #not a synchronized move, so make it happen now.
                 return self.sendMotionSegment()
@@ -274,8 +286,9 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
                         self.releaseChannel() #Done; release the communications channel
                         break
                     else: #buffer was full
-                        timeUntilSlotAvailable = self.virtualNode.stepGenPeriod * response['timeRemaining']
-                        notice(self, "MOVE " + str(segmentKey) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable) + " s")
+                        print response['timeRemaining']
+                        timeUntilSlotAvailable = units.s(self.virtualNode.stepGenUnits(response['timeRemaining']))
+                        notice(self, "MOVE " + str(response['currentKey']) + ": BUFFER FULL... WAITING " + str(timeUntilSlotAvailable))
                         time.sleep(timeUntilSlotAvailable)
                 else:
                     notice(self.virtualNode, 'Unable to send motion segment!')
@@ -295,6 +308,7 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
                         'readPosition': self.virtualNode.syntheticReadPosition, 'writePosition': self.virtualNode.syntheticWritePosition}            
 
     class getPositionRequest(core.actionObject):
+        """Returns the absolute position of the stepper motor."""
         def init(self):
             if self.transmitUntilResponse():
                 return self.getPacket()['stepper1_absolutePosition']
@@ -315,12 +329,14 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
                 statusCode -- will always read 1 to a spinStatusRequest. In the context of the response to a spin request, indicates whether the move was queued successfully.
                 currentKey -- Each motion segment is assigned a sequential ID to confirm nothing has been lost. This will return the key of the motion segment currently
                               under the buffer read head.
-                timeRemaining -- The time remaining in the current move, in step generator ticks (currently 62.5us).
+                timeRemaining -- The time remaining in the current move, in seconds.
                 readPosition -- The current position of the read head, which is the buffer location that was last read.
                 writePosition -- The current position of the write head, which is the buffer location that was last written.
             """
             if self.transmitUntilResponse():
-                return self.getPacket()
+                response = self.getPacket()
+                response.update({'timeRemaining':units.s(self.virtualNode.stepGenUnits(response['timeRemaining']))}) #convert time remaining into seconds
+                return response
             else:
                 notice(self.virtualNode, 'Unable to get spin status!')
                 return False
@@ -357,6 +373,7 @@ class virtualNode(nodes.soloGestaltVirtualNode): #this is a solo Gestalt node
             time.sleep(0.001)
 
 if __name__ == "__main__":
-    config.syntheticModeOn()
+#     config.syntheticModeOn()
     stepperNode = virtualNode()
-    stepperNode.setMotorCurrent(0.8, 0.2)
+    stepperNode.setMotorCurrent(0.8, 0.8, 0.8)
+    time.sleep(1)

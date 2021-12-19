@@ -775,7 +775,14 @@ class gestaltVirtualNode(baseGestaltVirtualNode):
 
 class soloGestaltVirtualNode(gestaltVirtualNode):
     """A gestalt node subclass that is not on a network bus with other nodes."""
-    pass
+    def init(self, *args, **kwargs):
+        #If no interface was provided, assign a default serial interface
+        if self._interface_ == None: #no interface was provided, create a new serial interface
+            if 'port' in kwargs:    #a port path was provided, use that
+                portPath = kwargs['port']
+            else:
+                portPath = None
+            self.setDefaultInterface(interfaces.serialInterface(port = portPath)) #baud rate defaults to 115200 as specified in interfaces.serialInterface
     
     
 class arduinoGestaltVirtualNode(soloGestaltVirtualNode):
