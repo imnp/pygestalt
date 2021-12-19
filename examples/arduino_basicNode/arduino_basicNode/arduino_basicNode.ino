@@ -36,6 +36,11 @@ void userSetup(){
 //---- USER LOOP ----
 void userLoop(){
   // The Gestalt version of the typical Arduino loop() function. Code placed here will be called in an infinite loop.
+//  cli();
+  ledOn();
+  _delay_ms(1000);
+  ledOff();
+  _delay_ms(1000);
 };
 
 //---- UTILITY FUNCTIONS ----
