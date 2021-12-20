@@ -344,7 +344,7 @@ class router(transformer):
         
         ###Need to add some checks here to make sure the routing map is valid
         
-        self.reverseRoutingMap = range(len(forwardRoutingMap)) #placeholder for reverse routing map
+        self.reverseRoutingMap = list(range(len(forwardRoutingMap))) #placeholder for reverse routing map
         for index, value in enumerate(self.forwardRoutingMap): #build reverse routing map
             self.reverseRoutingMap[value] = index
             

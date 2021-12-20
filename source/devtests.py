@@ -368,4 +368,4 @@ class tester(object):
 test1 = tester()
 test2 = tester()
 test3 = tester()
-print core.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', 1, arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53"))
+print(core.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', 1, arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53")))

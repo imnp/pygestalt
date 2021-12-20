@@ -163,8 +163,8 @@ class unitDictionary(dict):
 
     def __str__(self):
         """String representation of the unit dictionary."""
-        numeratorUnitList = filter(lambda unitPower: self[unitPower] > 0, self)
-        denominatorUnitList = filter(lambda unitPower: self[unitPower] < 0, self)
+        numeratorUnitList = [unitPower for unitPower in self if self[unitPower] > 0]
+        denominatorUnitList = [unitPower for unitPower in self if self[unitPower] < 0]
          
         returnString = '' #this is the seed of the return string that will be built upon
          

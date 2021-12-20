@@ -5,7 +5,7 @@
 
 #---- INCLUDES ----
 import threading
-import Queue
+import queue
 import time
 import copy
 import random   #for generating new addresses
@@ -44,7 +44,7 @@ class serialInterface(baseInterface):
         self.baudrate = baudrate    #the actively used baudrate
         self.defaultBaudrate = 115200   #This is the baud rate used for all custom-made gestalt nodes
         if self.baudrate == None: self.baudrate = self.defaultBaudrate
-            
+
         self.interfaceType = interfaceType
         self.providedName = name    #the name as provided by the user. If None, indicates that it's OK to auto-set _name_ to the port name.
         self._name_ = name
@@ -283,7 +283,7 @@ class serialInterface(baseInterface):
                 self._name_ = os.path.basename(portPath)    #no name was provided, so automatically set _name_ to the name of the port
             notice(self, "Successfully connected to port " + str(portPath))    #brag a little bit
             return True
-        except StandardError, error:
+        except Exception as error:
             notice(self, "Error opening serial port " + str(portPath))
             notice(self, error) #report system-provided error.
             return False
@@ -357,7 +357,7 @@ class serialInterface(baseInterface):
             """
             threading.Thread.__init__(self) #initialize threading parent class
             self.interface = interface  #a reference to serialInterface instance
-            self.transmitQueue = Queue.Queue()  #Use a queue to permit background transmission, and to allow multiple threads to access the interface.
+            self.transmitQueue = queue.Queue()  #Use a queue to permit background transmission, and to allow multiple threads to access the interface.
         
         def run(self):
             """Transmitter thread loop.
@@ -369,8 +369,8 @@ class serialInterface(baseInterface):
                     pending, packet = self.getPacketFromTransmitQueue() #try to get packet from the queue
                     if pending:
                         try:
-                            self.interface.port.write(packet.toString())
-                        except: #IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
+                            self.interface.port.write(packet.toByteArray())
+                        except: #Fixed encoding exception. IF THIS EXCEPTS, MIGHT WANT TO ADD A WAY TO RETRANSMIT THE PACKET. GETS HAIRY.
                             self.interface.isConnectedFlag.clear() #port is no longer connected
                             notice(self.interface, "Lost connection to serial port " + str(self.interface.portPath))
                     time.sleep(self.interface._threadIdleTime_) #idle
@@ -385,7 +385,7 @@ class serialInterface(baseInterface):
             """
             try:
                 return True, self.transmitQueue.get(block = False)    #signal success, return packet
-            except Queue.Empty:
+            except queue.Empty:
                 return False, None  #signal failure, return None  
         
         def putPacketInTransmitQueue(self, packet):
@@ -622,7 +622,7 @@ class gestaltInterface(baseInterface):
         """
         def init(self):
             """Initializes the channel priority thread."""
-            self.channelPriorityQueue = Queue.Queue()   #create the channel priority queue
+            self.channelPriorityQueue = queue.Queue()   #create the channel priority queue
         
         def run(self):
             """The channel priority thread loop.
@@ -649,7 +649,7 @@ class gestaltInterface(baseInterface):
             """
             try:
                 return True, self.channelPriorityQueue.get(block = False)    #signal success, return actionMolecule
-            except Queue.Empty:
+            except queue.Empty:
                 return False, None  #signal failure, return None
         
         def putActionMolecule(self, actionMolecule):
@@ -711,7 +711,7 @@ class gestaltInterface(baseInterface):
         """
         def init(self):
             """Initialization routine for the channel access thread."""
-            self.channelAccessQueue = Queue.Queue() #instantiate a queue for holding actionObjects awaiting channel access.
+            self.channelAccessQueue = queue.Queue() #instantiate a queue for holding actionObjects awaiting channel access.
             self.channelAccessLock = threading.Lock()   #creates a lock object used to hand off access to an actionObject
             self.channelAccessLock.acquire()    #lock the lock object
         
@@ -743,7 +743,7 @@ class gestaltInterface(baseInterface):
             """
             try:
                 return True, self.channelAccessQueue.get(block = False)    #signal success, return actionObject
-            except Queue.Empty:
+            except queue.Empty:
                 return False, None  #signal failure, return None            
             
         def putActionObject(self, actionObject):
@@ -822,7 +822,7 @@ class gestaltInterface(baseInterface):
         """
         def init(self):
             """Synthetic node thread initialization method."""
-            self.syntheticResponseQueue = Queue.Queue()
+            self.syntheticResponseQueue = queue.Queue()
         
         def run(self):
             """Synthetic response thread loop."""
@@ -848,7 +848,7 @@ class gestaltInterface(baseInterface):
             """
             try:
                 return True, self.syntheticResponseQueue.get(block = False)    #signal success, return tuple
-            except Queue.Empty:
+            except queue.Empty:
                 return False, None  #signal failure, return None            
             
         def putInSyntheticQueue(self, encodedPacket, syntheticResponseFunction):
@@ -972,7 +972,7 @@ class gestaltInterface(baseInterface):
         """
         def init(self):
             """Packet router thread initialization method."""
-            self.routerQueue = Queue.Queue()    #create a packet router queue.
+            self.routerQueue = queue.Queue()    #create a packet router queue.
         
         def run(self):
             """Packet router loop.
@@ -1005,5 +1005,5 @@ class gestaltInterface(baseInterface):
             """
             try:
                 return True, self.routerQueue.get(block = False)    #signal success, return decoded packet
-            except Queue.Empty:
+            except queue.Empty:
                 return False, None  #signal failure, return None  

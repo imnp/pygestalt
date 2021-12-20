@@ -64,12 +64,12 @@ def notice(callingObject, noticeString):
     
     For now this function just prints to the terminal, but eventually it could publish to a browser-based interface etc...
     """
-    print "[" + objectIdentifier(callingObject) + "] " + str(noticeString) #print objectRepr: message
+    print("[" + objectIdentifier(callingObject) + "] " + str(noticeString)) #print objectRepr: message
 
 def printToTerminal(text, newLine = True):
     """Prints text to the terminal window, with or without a carriage return."""
     if newLine == True: #print with carriage return
-        print text
+        print(text)
     else: #print without carriage return
         sys.stdout.write(text)
         sys.stdout.flush()
@@ -91,7 +91,7 @@ def debugNotice(callingObject, channel, noticeString, padding = False, newLine =
     Returns True if notice was printed (verbose debug is enabled), or False otherwise
     """
     if config.verboseDebug() and config.debugChannelEnabled(channel):
-        if padding: print ""
+        if padding: print("")
         if callingObject == None:
             printToTerminal(str(noticeString), newLine)
         elif type(callingObject) == str:
@@ -253,7 +253,7 @@ def unsignedIntegerToBytes(integer, numbytes):
     integer -- the number to be converted
     numbytes -- the number of bytes to be used in representing the integer
     """
-    bytes = range(numbytes)
+    bytes = list(range(numbytes))
     for i in bytes:
         bytes[i] = int(integer%256)
         integer -= integer%256
@@ -414,7 +414,7 @@ class intelHexParser(object):
             self.hexFile = open(filename, 'r')
             return self.hexFile
         else:
-            print "intelHexParser: please provide a filename!"
+            print("intelHexParser: please provide a filename!")
             return False
         
     def resetParser(self):
@@ -481,13 +481,13 @@ class intelHexParser(object):
         self.baseByteLocation = (record['DATA'][0]*256 + record['DATA'][1])*16    #value is shifted by four bits
     
     def processStartSegmentAddressRecord(self, record):
-        print "Start Segment Address Record Encountered and Ignored"
+        print("Start Segment Address Record Encountered and Ignored")
     
     def processExtendedLinearAddressRecord(self, record):
-        print "Extended Linear Address Record Encountered and Ignored"
+        print("Extended Linear Address Record Encountered and Ignored")
     
     def processStartLinearAddressRecord(self, record):
-        print "Start Linear Address Record Encountered and Ignored"
+        print("Start Linear Address Record Encountered and Ignored")
         
     def checkAddressContinuity(self):
         baseAddress = self.parsedFile[0][0]    #inital address entry
@@ -496,8 +496,8 @@ class intelHexParser(object):
                 baseAddress += 1
                 continue
             else:
-                print "CONTINUITY CHECK FAILED"
+                print("CONTINUITY CHECK FAILED")
                 return False
         
-        print "CONTINUITY CHECK PASSED"
+        print("CONTINUITY CHECK PASSED")
         

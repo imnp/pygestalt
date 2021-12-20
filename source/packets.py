@@ -6,7 +6,7 @@
 from pygestalt import utilities
 import itertools
 import math
-import errors
+from . import errors
 
 class serializedPacket(list):
     """The type used for storing serialized packets.
@@ -25,6 +25,10 @@ class serializedPacket(list):
     def toString(self):
         """A shortcut to get the serialized packet in the format of a string."""
         return utilities.listToString(self)
+
+    def toByteArray(self):
+        """A shortcut to get the serialized packet in the format of a bytearray."""
+        return bytearray(self)
     
     def toList(self):
         """A shortcut to get the serialized packet in the form of a stripped list."""
@@ -496,7 +500,7 @@ class length(packetToken):
         
         if len(inProcessPacket)>0:  #an inProcess packet has been provided
             #create and count a list only containing integers from the flattened inProcessPacket
-            length = len(list(itertools.ifilter(lambda token: type(token) == int, utilities.flattenList(inProcessPacket))))
+            length = len(list(filter(lambda token: type(token) == int, utilities.flattenList(inProcessPacket))))
             if self.countSelf: length += 1
             return utilities.unsignedIntegerToBytes(length, self.size)  #convert to integer of lenth self.size
         else: return self   #no in-process packet has been provided.
@@ -530,7 +534,7 @@ class checksum(packetToken):
         
         if len(inProcessPacket)>0: #an inProcess packet has been provided
             # create list of all the ints. At this point that should be everything but the checksum token
-            checksumList = list(itertools.ifilter(lambda token: type(token) == int, utilities.flattenList(inProcessPacket)))
+            checksumList = list(filter(lambda token: type(token) == int, utilities.flattenList(inProcessPacket)))
             return self.CRCInstance.generate(checksumList)  #generate and return checksum
         else: return self
         

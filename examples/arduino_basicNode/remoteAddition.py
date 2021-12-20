@@ -13,4 +13,4 @@ value2 = float(sys.argv[2]) #second input argument, converted from string to flo
 
 myArduino = arduino.virtualNode()
 
-print myArduino.sumNumbers(value1, value2)
+print(myArduino.sumNumbers(value1, value2))

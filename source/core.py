@@ -567,11 +567,11 @@ def distributedFunctionCall(owner, targetList, attribute, commonInterface, syncT
         else: #evenly distributed argument
             expandedArguments += [[argument for target in targetList]]
     
-    collectedArguments = zip(*tuple(expandedArguments)) #a list of tuples: [(arg1_target1, arg2_target1), (arg1_target2, arg2_target2)]
+    collectedArguments = list(zip(*tuple(expandedArguments))) #a list of tuples: [(arg1_target1, arg2_target1), (arg1_target2, arg2_target2)]
     if collectedArguments == []: collectedArguments = [() for target in targetList] #This needs to be the correct size to properly zip into function calls, even if empty.
     
     #-- Organize Keyword Arguments --
-    for key, value in keywordArguments.iteritems(): #iterate over all provided keyword arguments
+    for key, value in keywordArguments.items(): #iterate over all provided keyword arguments
         if type(value) == tuple: #uniquely distributed argument
             uniqueDistribution = True
             if len(value) == targetCount: #there are the correct number of provided arguments
@@ -582,8 +582,8 @@ def distributedFunctionCall(owner, targetList, attribute, commonInterface, syncT
         else: #evenly distributed argument
             expandedKeywordArguments += [[{key:value} for target in targetList]]
     
-    zippedKeywordArguments = zip(*tuple(expandedKeywordArguments)) # a list of tuples: [({arg1_target1},{arg2_target1}), ({arg1_target2}, arg2_target2})]
-    collectedKeywordArguments = [{key:value for pair in thisTuple for key, value in pair.items()} for thisTuple in zippedKeywordArguments]
+    zippedKeywordArguments = list(zip(*tuple(expandedKeywordArguments))) # a list of tuples: [({arg1_target1},{arg2_target1}), ({arg1_target2}, arg2_target2})]
+    collectedKeywordArguments = [{key:value for pair in thisTuple for key, value in list(pair.items())} for thisTuple in zippedKeywordArguments]
         # The above results in [{arg1_target1, arg2_target1}, {arg1_target2, arg2_target2}]
     if collectedKeywordArguments == []: collectedKeywordArguments = [{} for target in targetList] #This needs to be the correct size to properly zip into function calls, even if empty.
     
@@ -592,7 +592,7 @@ def distributedFunctionCall(owner, targetList, attribute, commonInterface, syncT
         syncToken = syncTokenType() #generate a new syncronization token
         for keywordDictionary in collectedKeywordArguments: keywordDictionary.update({'sync':syncToken}) #updates all kwarg dictionaries
         if not commonInterface: 
-            print "WARNING: SYNCHRONIZATION PERFORMED ACROSS MULTIPLE INTERFACES. STRANGE THINGS MIGHT HAPPEN (OR NOT HAPPEN)."
+            print("WARNING: SYNCHRONIZATION PERFORMED ACROSS MULTIPLE INTERFACES. STRANGE THINGS MIGHT HAPPEN (OR NOT HAPPEN).")
     else:
         syncToken = False
         
