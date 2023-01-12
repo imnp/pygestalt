@@ -61,7 +61,7 @@ class unit(object):
         else:
             return dFloat(value, {self:1})
     
-    def __rdiv__(self, value):
+    def __rtruediv__(self, value):
         """Right divide for units.
         
         Gets called when a number or unit is directly divided by a unit to create a dFloat.
@@ -72,7 +72,7 @@ class unit(object):
         else:
             return dFloat(value, {self:-1})
 
-    def __div__(self, value):
+    def __truediv__(self, value):
         """Divide for units.
         
         Gets called when a unit is directly divided by a unit or number to create a dFloat.
@@ -120,7 +120,7 @@ class unitDictionary(dict):
         
         return outputUnitDict
     
-    def __div__(self, inputUnitDict):
+    def __truediv__(self, inputUnitDict):
         """Overrides division to mix units into the dictionary.
         
         inputUnitDict -- a set of units of unitDictionary type or in the same format {unitObject:unitPower,...}
@@ -137,7 +137,7 @@ class unitDictionary(dict):
         
         return outputUnitDict  
     
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         """Overrides right-hand division. This is only used to invert units.
         other -- whatever the left-hand multiplier is. Doesn't matter as it doesn't get used.
         """
@@ -320,7 +320,7 @@ class dFloat(float):
             newUnits = {other:1} * self.units
             return dFloat(value, newUnits)
     
-    def __div__(self, other):
+    def __truediv__(self, other):
         """Overrides left-hand division.
         
         other -- the right-hand number to be divided by.
@@ -336,7 +336,7 @@ class dFloat(float):
             newUnits = self.units / {other:1}
             return dFloat(float(self), newUnits)
     
-    def __rdiv__(self, other):
+    def __rtruediv__(self, other):
         """Overrides right-hand division.
         
         other -- the left-hand number to divide.
