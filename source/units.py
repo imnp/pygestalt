@@ -212,7 +212,12 @@ class dFloat(float):
         """
         
         self.units = unitDictionary(units)
-            
+    
+    def __call__(self, value):
+        """A shortcut for creating a new dFloat with the same units as the called dFloat."""
+        return dFloat(value, self.units)
+
+    
     def __str__(self):
         """String representation of the dFloat number"""
         
@@ -551,7 +556,16 @@ def applyDefaultUnits(value, defaultUnits):
         return value #already a dFloat, no need to convert
     else:
         return defaultUnits*value #multiplying is the safest way to do this, because it works with compound units (e.g. px/inch)
-    
+
+def getAbbreviation(value):
+    """Returns the abbreviation string for an input unit or dFloat."""
+    if type(value) == unit:
+        return value.abbreviation
+    elif type(value) == dFloat:
+        return str(value.units)
+    else:
+        return None
+
 #-- STANDARD UNITS --
 
 # distance

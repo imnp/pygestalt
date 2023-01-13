@@ -22,3 +22,6 @@ class ArrayError(Error):
 
 class MatrixError(Error):
     pass
+
+class PlottingError(Error):
+    pass

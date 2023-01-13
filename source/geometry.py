@@ -3,7 +3,7 @@
 """A library for expressing and manipulating geometry."""
 
 import math
-from pygestalt import errors
+from pygestalt import errors, units
 
 class array(list):
     """A container for storing multi-dimensional arrays of numbers.
@@ -494,4 +494,46 @@ def matrixHorizontalConcatenate(leftMatrix, rightMatrix):
     else:
         return [list.__getitem__(leftMatrix, rowNumber) + list.__getitem__(rightMatrix,rowNumber) for rowNumber in range(leftRows)]
     
-    
+
+#--- BASIC GEOMETRY FUNCTIONS OPERATING ON TUPLES ---
+
+class vector(object):
+    """A (2D) vector object."""
+    def __init__(self, startPoint, endPoint):
+        """Initializes the vector object.
+
+        For now, we are just initializing with a start and end point. But eventually it would be great to
+        be able to initialize using start point and angle, or slope and intercept.
+
+        Internally, vectors are stored as slope and intercept.
+        """
+
+        self.slope, self.intercept = self.slopeintercept(startPoint, endPoint)
+
+    def __repr__(self):
+        return "vector (a" + str(round(self.slope, 3)) + " b" + str(round(self.intercept, 3)) + ")"
+
+    def __call__(self, independentValue):
+        """Calling the vector returns its interpolated value at the provided independent value."""
+        return self.interpolate(independentValue)
+
+    def slopeintercept(self, startPoint = None, endPoint = None):
+        """Returns the slope and intercept as a tuple.
+
+        If startPoint and endPoint are supplied, the result will be based on that. Otherwise, it simply returns
+        the stored slope and intercept of the vector object.
+        """
+
+        if startPoint: #actually calculate the slope and intercept.
+            slope = (endPoint[1]-startPoint[1])/(endPoint[0]-startPoint[0])
+            intercept = startPoint[1] - slope*startPoint[0]
+
+            return slope, intercept
+
+    def interpolate(self, independentValue):
+        """Returns a point on the vector located at the provided independent value."""
+
+        return self.slope * independentValue + self.intercept
+
+
+

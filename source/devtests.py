@@ -2,13 +2,16 @@
 
 from pygestalt import packets
 from pygestalt import utilities
-from pygestalt import core
-from pygestalt import nodes
+# from pygestalt import core
+# from pygestalt import nodes
 from pygestalt import config
-from pygestalt import interfaces
+# from pygestalt import interfaces
 from pygestalt import units
 from pygestalt import geometry
 from pygestalt import mechanics
+from pygestalt import plotting
+
+
 import copy
 import time
 
@@ -170,8 +173,8 @@ import time
 # float2 = units.s(4.5)
 # print (float1*float2)
 # 
-# float3 = 1.423*units.N*units.m/units.s**2
-# print float3
+# float3 = units.N*units.m/units.s**2
+# print(float3)
 
 # float1 = 4.44*units.m
 # print float1
@@ -361,11 +364,18 @@ import time
 
 ##----- Function Distributor -----
 
-class tester(object):
-    def test(self, arg1, arg2, arg3, arg4 = None, arg5 = None, sync = None):
-        return arg5
+# class tester(object):
+#     def test(self, arg1, arg2, arg3, arg4 = None, arg5 = None, sync = None):
+#         return arg5
 
-test1 = tester()
-test2 = tester()
-test3 = tester()
-print(core.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', 1, arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53")))
+# test1 = tester()
+# test2 = tester()
+# test3 = tester()
+# print(core.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', 1, arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53")))
+
+##------ PLOTTING -------
+
+x = plotting.dataset([(1,1),(3,3),(5,7)], (units.s, units.m))
+x.plot()
+
+print(x(units.s(6)))
