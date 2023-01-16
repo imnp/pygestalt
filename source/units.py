@@ -56,7 +56,7 @@ class unit(object):
             self.primary_unitdict = compound_unitdict
         else:
             if self.baseUnit == 0: #dimensionless
-                self.primary_unitdict = unitdict({})
+                self.primary_unitdict = unitdict({self:1})
             else:
                 self.primary_unitdict = unitdict({self:1})
 
@@ -72,7 +72,7 @@ class unit(object):
 
     def isDerivedUnit(self):
         """Returns True if this unit is based on other units."""
-        return (self.baseUnit != None)
+        return (self.baseUnit != None and self.baseUnit != 0)
 
     def isCompoundUnit(self):
         """Returns True if this unit is a compound unit (e.g. mm/s)"""
@@ -353,7 +353,7 @@ class unitdict(dict):
 
     def removeDimensionlessUnits(self):
         """Removes all dimensionless units from the dictionary."""
-        for thisUnit in self:
+        for thisUnit in dict(self):
             if thisUnit.isDimensionless():
                 self.pop(thisUnit)
 
@@ -554,7 +554,7 @@ class dFloat(float):
         power -- the power to raise this value to.
         """
         value = float(self)**float(power)
-        newUnits = self.units ** other
+        newUnits = self.units ** power
         return dFloat(value, newUnits)
 
 #-- STANDARD UNITS --
@@ -589,6 +589,9 @@ kgf = unit('kgf', 'kilogram force', N, 1.0/9.80665)
 gf = unit('gf', 'gram force', kgf, 1000.0)
 ozf = unit('ozf', 'ounce force', gf, 0.035274)
 lbf = unit('lbf', 'pound force', ozf, 1.0/16.0)
+
+# power - mechanical
+W = unit('W', 'watt', N*m/s, 1.0)
 
 # electrical
 V = unit('V', 'volt')

@@ -128,14 +128,8 @@ class singleAxisElement(transformer):
         else:
             raise errors.UnitError("Input and output units must be of type units.unit")
 
-        if type(transform) == units.dFloat: #provided transform comes with its own units
-            if not units.hasUnits(transform, inputUnits, checkEquivalents = True): #dFloat without input units provided
-                transform = transform / inputUnits #assume input units in denominator
-            if not units.hasUnits(transform, outputUnits, checkEquivalents = True): #dFloat without output units provided
-                transform = transform * outputUnits #assume output units in numerator
-            transform = transform.convert(self.outputUnits/self.inputUnits) #convert units into units provided on initialization
-        else: #transform is a scalar. Give it units.
-            transform = self.outputUnits(transform)/self.inputUnits
+        transform = (outputUnits/inputUnits)(transform) #convert transform to provided units
+
         #for now we assume any input that isn't a dFloat is a scalar of some type. Later, this needs to be appended to include custom transforms.
         super(singleAxisElement, self).__init__(forwardTransform = transform, reverseTransform = None, inertia = inertia)
 
@@ -149,7 +143,7 @@ class singleAxisElement(transformer):
         """
         
         if type(forwardState) == units.dFloat:
-            convertedForwardState = units.convertToUnits(forwardState, self.inputUnits, strict = True) #convert to input units, don't allow reciprocals
+            convertedForwardState = self.inputUnits(forwardState)
             return self.forwardTransform*convertedForwardState
         else:
             utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
@@ -164,35 +158,35 @@ class singleAxisElement(transformer):
         """
         
         if type(reverseState) == units.dFloat:
-            convertedReverseState = units.convertToUnits(reverseState, self.outputUnits, strict = True) #convert to input units, don't allow reciprocals
+            convertedReverseState = self.outputUnits(reverseState)
             return self.reverseTransform*convertedReverseState
         else:
             utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
             raise errors.MechanismError("Incorrect input type to singleAxisElement.reverse()")
 
-    def transform(self, inputState):
-        """Transforms from one state to another based on the provided input units.
+    # def transform(self, inputState):
+    #     """Transforms from one state to another based on the provided input units.
           
-        This is something of a bonus function, as the recommended useage is to explicitly call forward() or reverse().
-        """
+    #     This is something of a bonus function, as the recommended useage is to explicitly call forward() or reverse().
+    #     """
           
-        if type(inputState) == units.dFloat:
+    #     if type(inputState) == units.dFloat:
             
-            forwardUnitEquivalency = units.getUnitEquivalency(inputState, self.inputUnits(1)) #1 if equivalent, -1 if reciprocals, 0 if not equivalent
-            reverseUnitEquivalency = units.getUnitEquivalency(inputState, self.outputUnits(1))
+    #         forwardUnitEquivalency = units.getUnitEquivalency(inputState, self.inputUnits(1)) #1 if equivalent, -1 if reciprocals, 0 if not equivalent
+    #         reverseUnitEquivalency = units.getUnitEquivalency(inputState, self.outputUnits(1))
             
-            if forwardUnitEquivalency == 1: #inputState units match transform input units. Transform in the forward direction.
-                convertedInputState = units.convertToUnits(inputState, self.inputUnits, strict = True) #convert to input units, don't allow reciprocals
-                return self.forwardTransform*convertedInputState
-            elif reverseUnitEquivalency == 1: #inputState units match transform output units. Transform in the reverse direction.
-                convertedInputState = units.convertToUnits(inputState, self.outputUnits, strict = True) #convert to input units, don't allow reciprocals
-                return self.reverseTransform*convertedInputState
-            else:
-                utilities.notice(self, "Input to singleAxisElement transformer cannot be transformed because of a dimensionality mismatch.")
-                raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")
-        else:
-            utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
-            raise errors.MechanismError("Incorrect input type to singleAxisElement.transform()")
+    #         if forwardUnitEquivalency == 1: #inputState units match transform input units. Transform in the forward direction.
+    #             convertedInputState = units.convertToUnits(inputState, self.inputUnits, strict = True) #convert to input units, don't allow reciprocals
+    #             return self.forwardTransform*convertedInputState
+    #         elif reverseUnitEquivalency == 1: #inputState units match transform output units. Transform in the reverse direction.
+    #             convertedInputState = units.convertToUnits(inputState, self.outputUnits, strict = True) #convert to input units, don't allow reciprocals
+    #             return self.reverseTransform*convertedInputState
+    #         else:
+    #             utilities.notice(self, "Input to singleAxisElement transformer cannot be transformed because of a dimensionality mismatch.")
+    #             raise errors.MechanismError("Encountered dimensionality mismatch while attempting transform.")
+    #     else:
+    #         utilities.notice(self, "Input to singleAxisElement transformer must be of type units.dFloat!")
+    #         raise errors.MechanismError("Incorrect input type to singleAxisElement.transform()")
         
 
 #---- SINGLE AXIS ELEMENT TYPES ----

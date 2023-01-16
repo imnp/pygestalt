@@ -470,3 +470,13 @@ import time
 ##------ SIMULATION ------
 # simulation.clearpath_CPM_SDSK_3411P_RLN.power_curve().plot()
 
+# units.m(3)**-1
+
+aAxis = mechanics.rotaryPulley(1.0)
+load = simulation.load((units.oz*units.inch**2)(3.9))
+# print(aAxis.forward(units.rev(3)))
+
+testSystem = simulation.system(simulation.clearpath_CPM_SDSK_3411P_RLN, aAxis, load)
+print(testSystem.reflectedInertia())
+
+# print(1/units.rad**2)
