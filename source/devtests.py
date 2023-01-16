@@ -247,6 +247,29 @@ print(repr(power_english))
 
 energy_english = power_english*units.s
 print(energy_english.getBaseUnitDictionary())
+
+# Test unitdict equivilency functions
+velocity1 = units.m/units.s
+velocity2 = units.deg*units.inch/units.min
+
+vel1_unitdict, conversion = velocity1.getBaseUnitDictionary()
+vel2_unitdict, conversion = velocity2.getBaseUnitDictionary()
+
+print("vel1:" + str(vel1_unitdict))
+print("vel2:" + str(vel2_unitdict))
+
+print(vel1_unitdict == vel2_unitdict)
+
+# Test Conversion
+
+distance_m = units.m(2)
+
+print(units.inch(distance_m))
+
+
+print(units.rad(units.deg(360)))
+
+print((units.m/units.s)((units.ft/units.min)(5)))
 # print(units.g.isCompoundUnit())
 
 

@@ -32,9 +32,9 @@ class unit(object):
 
 
         If the unit is a "derived unit," meaning it is based on other units, then the following should be provided:
-            baseunit -- A unit type from which this unit a scalar multiple. For example, if this unit was millimeters, the base unit might be meters.
+            baseUnit -- A unit type from which this unit a scalar multiple. For example, if this unit was millimeters, the base unit might be meters.
+                        -- If baseUnit is 0, this will be treated as a non-dimensional unit.
             conversion  -- The conversion factor to get from the base unit to this unit. thisUnit = conversion*baseUnit.
-                        -- If conversion is 0, this will be treated as a non-dimensional unit.
 
         If the unit is a "compound unit," for example mm/s, then the following should be provided:
             compound_unitdict -- the combination of units from which this unit is derived, of type unitdict. E.g. if this unit represents velocity, 
@@ -55,7 +55,10 @@ class unit(object):
         if compound_unitdict:
             self.primary_unitdict = compound_unitdict
         else:
-            self.primary_unitdict = unitdict({self:1})
+            if self.baseUnit == 0: #dimensionless
+                self.primary_unitdict = unitdict({})
+            else:
+                self.primary_unitdict = unitdict({self:1})
 
     def __repr__(self):
         if self.isDerivedUnit():
@@ -75,13 +78,16 @@ class unit(object):
         """Returns True if this unit is a compound unit (e.g. mm/s)"""
         return self.primary_unitdict != {self:1}
 
+    def isDimensionless(self):
+        return self.baseUnit == 0
+
     def __call__(self, arg):
         """Returns a dFloat that is in units of self.
 
         If a non-dFloat is provided, these units will be applied.
         If a dFloat is provided, it will attempt to convert into these units.
         """
-        return dFloat(float(arg), self)
+        return self.convert(arg)
 
 
     # ---- MATH FUNCTIONS ----
@@ -256,6 +262,39 @@ class unit(object):
 
         return output_unitdict, output_conversion
 
+    def convert(self, target):
+        """Converts the provided target into these units.
+
+        target -- a unit, dFloat, or number.
+
+        Returns dFloat, or False if units are incompatible.
+        """
+
+        this_baseunitdict, this_conversion = self.getBaseUnitDictionary()
+
+        if type(target) == unit: #target is a unit
+            that_value = 1.0
+            that_unitdict, that_conversion = target.getBaseUnitDictionary()
+
+        elif type(target) == dFloat: #target is a dFloat
+            that_value = float(target)
+            that_unitdict, that_conversion = target.units.getBaseUnitDictionary()
+
+        else: #target is presumably a number.
+            return dFloat(target, self)
+
+        equivalency = this_baseunitdict.isEquivalent(that_unitdict)
+
+        if equivalency == 0:
+            return False
+
+        else:
+            #derived_units = conversion * base_units
+            that_value_baseunits = that_value / that_conversion
+            that_value_thisunits = that_value_baseunits * (this_conversion**equivalency)
+
+            return dFloat(that_value_thisunits, self)
+
 
 
 
@@ -308,6 +347,50 @@ class unitdict(dict):
         """Returns the unitdict as a list of (unit, power) tuples."""
         return [(thisUnit, self[thisUnit]) for thisUnit in self]
 
+    def removeDimensionlessUnits(self):
+        """Removes all dimensionless units from the dictionary."""
+        for thisUnit in self:
+            if thisUnit.isDimensionless():
+                self.pop(thisUnit)
+
+
+    def __eq__(self, other):
+        """Compares this unit dictionary against another.
+
+        We are overriding this class because we need to filter out any dimensionless units before doing the comparison.
+        """
+        this_unitdict = copy.copy(self)
+        this_unitdict.removeDimensionlessUnits()
+
+        that_unitdict = copy.copy(other)
+        that_unitdict.removeDimensionlessUnits()
+
+        return dict.__eq__(this_unitdict, that_unitdict)
+
+    def isEquivalent(self, other):
+        """Returns the equivalency of this unitdict to another unitdict.
+        
+        Equivalency is defined as numbers whose BASE units are either equal or reciprocals.
+        
+        Returns the power of the equivalency (1 or -1), or 0 if the units are not equivalent
+        """  
+        this_unitdict = copy.copy(self)
+        this_unitdict.removeDimensionlessUnits()
+
+        that_unitdict = copy.copy(other)
+        that_unitdict.removeDimensionlessUnits()
+
+        if dict.__eq__(this_unitdict, that_unitdict): #they are equal
+            return 1
+
+        that_unitdict.invert()
+
+        if dict.__eq__(this_unitdict, that_unitdict): #they are inverses of each other
+            return -1
+
+        return 0 #not equal
+
+
     def __str__(self):
         """String representation of the unit dictionary."""
         numeratorUnits = [(numeratorUnit, self[numeratorUnit]) for numeratorUnit in self if self[numeratorUnit] > 0]
@@ -322,7 +405,7 @@ class unitdict(dict):
         #fill in numerator string
         for numeratorUnit, numeratorValue in numeratorUnits: #iterate over all units in numerator
             if numeratorValue > 1: #more than to the first power
-                returnString += numeratorUnit.abbreviation + '^' + str(numeratorValue) + '*'
+                returnString += numeratorUnit.abbreviation + '^' + str(int(numeratorValue)) + '*'
             else:
                 returnString += numeratorUnit.abbreviation + '*'
 
@@ -333,7 +416,7 @@ class unitdict(dict):
          
         for denominatorUnit, denominatorValue in denominatorUnits: #iterate over all units in denominator
             if denominatorValue < -1: #more than to the first power
-                returnString += denominatorUnit.abbreviation + '^' + str(-denominatorValue) + '*'
+                returnString += denominatorUnit.abbreviation + '^' + str(-int(denominatorValue)) + '*'
             else:
                 returnString += denominatorUnit.abbreviation + '*'
          
@@ -468,189 +551,6 @@ class dFloat(float):
         value = float(self)**float(power)
         newUnits = self.units ** other
         return dFloat(value, newUnits)
-
-
-
-#-- CONVERSION FUNCTIONS --
-
-def reduceToBaseUnits(sourceNumber):
-    """Reduces a dFloat into an equivalent in base units.
-    
-    sourceNumber -- a dFloat to be reduced.
-    
-    returns an equivalent dFloat whose units are the base units. 
-    """
-    if type(sourceNumber) != dFloat:
-        raise errors.UnitError("Unable to reduce units. Must provide source number as a dFloat.")
-        return False
-    else:
-        value = float(sourceNumber)
-        units = sourceNumber.units #unitDictionary
-        baseUnits = unitDictionary()
-        for thisUnit in units: #iterate over units in unit dictionary
-            baseUnit, conversionFactor = getBaseUnits(thisUnit)
-            power = units[thisUnit] #the power to which the unit is raised
-            baseUnits.update({baseUnit:power})
-            value = value/(conversionFactor**power)
-        return dFloat(value, baseUnits)      
-
-def unitsAreEqual(number1, number2):
-    """Returns True if both provided numbers have equal units.
-    
-    number1, number2 -- dFloat numbers or unitDictionaries
-    
-    Note that this algorithm both checks to see if the unit dictionaries are identical while also taking into account
-    non-dimensional units such as radians. It DOES NOT reduce to base units first, so mm != m.
-    """
-    
-    unitDict1 = copy.copy(number1.units) #make copies of dictionaries so don't mess with them
-    unitDict2 = copy.copy(number2.units)
-    
-    for units1 in unitDict1: #iterate over all units in the first unit dictionary
-        units1Power = unitDict1[units1]
-        units2Power = unitDict2.pop(units1, False) #Retrieve unit powers. Returns False if units1 is not in unitDict2
-    
-        if units1.baseUnit == 0: #units1 is dimensionless, so continue to next iteration
-            continue
-        if units2Power == False: #units1 is inot in unitsDict2!
-            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
-            return False
-        if units1Power != units2Power: #powers are different
-            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units1.abbreviation + "^"+str(units2Power))
-            return False
-        else:
-            continue #this set of units matches
-    
-    #at this point, unitDict1 has been fully iterated thru. Still need to check that all remaining units in unitDict2 are dimensionless
-    for units2 in unitDict2:
-        if units2.baseUnit == 0:
-            utilities.notice('units.unitsAreEqual', "WARNING: Non-dimensional units do not match. Assuming unit type " + units2.fullName.upper())
-            continue
-        else:
-            utilities.debugNotice('units.unitsAreEqual', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
-            return False
-    
-    return True #if reached this point, unit dictionaries match
-
-def unitsAreReciprocals(number1, number2):
-    """Returns True if both provided numbers have equivalent reciprocal units.
-    
-    number1, number2 -- dFloat numbers or unitDictionaries
-    
-    Note that this algorithm both checks to see if the unit dictionaries are reciprocals while also taking into account
-    non-dimensional units such as radians. It DOES NOT reduce to base units first, so mm != m.
-    """
-
-    unitDict1 = copy.copy(number1.units) #make copies of dictionaries so don't mess with them
-    unitDict2 = copy.copy(number2.units)
-    
-    for units1 in unitDict1: #iterate over all units in the first unit dictionary
-        units1Power = unitDict1[units1]
-        units2Power = unitDict2.pop(units1, False) #Retrieve unit powers. Returns False if units1 is not in unitDict2
-    
-        if units1.baseUnit == 0: #units1 is dimensionless, so continue to next iteration
-            continue
-        if units2Power == False: #units1 is not in unitsDict2!
-            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality mismatch: units "+ units1.abbreviation + " not in both numbers")
-            return False
-        if units1Power != -units2Power: #powers are not reciprocals
-            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality mismatch: " + units1.abbreviation + "^"+str(units1Power) + " != " + units1.abbreviation + "^-"+str(units2Power))
-            return False
-        else:
-            continue #this set of units matches
-    
-    #at this point, unitDict1 has been fully iterated thru. Still need to check that all remaining units in unitDict2 are dimensionless
-    for units2 in unitDict2:
-        if units2.baseUnit == 0:
-            utilities.notice('units.unitsAreReciprocals', "WARNING: Non-dimensional units do not match. Assuming unit type " + units2.fullName.upper())
-            continue
-        else:
-            utilities.debugNotice('units.unitsAreReciprocals', 'units', "Dimensionality "+ units2.abbreviation + " not present in both numbers")
-            return False
-    
-    return True #if reached this point, unit dictionaries match    
-
-def getUnitEquivalency(number1, number2):
-    """Returns the equivalency of the units of two input numbers.
-
-    number1, number2 -- dFloat numbers or unitDictionaries
-    
-    Equivalency is defined as numbers whose BASE units are either equal or reciprocals.
-    
-    Returns the power of the equivalency (1 or -1), or 0 if the units are not equivalent
-    """       
-    if unitsAreEqual(reduceToBaseUnits(number1), reduceToBaseUnits(number2)):
-        return 1
-    elif unitsAreReciprocals(reduceToBaseUnits(number1), reduceToBaseUnits(number2)):
-        return -1
-    else:
-        return 0
-    
-    
-def hasUnits(sourceNumber, unitsToCheck, checkEquivalents = True):
-    """ Checks whether a dFloat's unit dictionary contains a particular unit type.
-    
-    sourceNumber -- the number whose units are to be checked
-    unitsToCheck -- a unit type whose presence is to be checked in the source number
-    checkEquivalents -- unless explicitly provided as False, this function will return True if an equivalent unit to unitsToCheck
-                        is found to be present in the source number.
-    """
-    if checkEquivalents: #reduce everything to base units
-        sourceUnits = {getBaseUnits(unit)[0]:sourceNumber.units[unit] for unit in sourceNumber.units} #get dictionary of base units
-        targetUnit = getBaseUnits(unitsToCheck)[0]
-    else: #only accept literally equivalent units
-        sourceUnits = sourceNumber.units
-        targetUnit = unitsToCheck
-    return (targetUnit in sourceUnits)
-    
-
-def convertToUnits(sourceNumber, targetUnits, strict = False):
-    """Converts a number into target units if possible.
-    
-    sourceNumber -- a dFloat number to be converted
-    targetUnits -- either a dFloat, unitDictionary, or unit
-    strict -- if False, will allow conversion between reciprocal numbers.
-    
-    returns a dFloat in the target units, or raises an exception if units mis-match.
-    """
-    
-    sourceBaseNumber = reduceToBaseUnits(sourceNumber)
-
-    if type(targetUnits) == unit: #target units are provided as a single unit type
-        targetNumber = dFloat(1,{targetUnits:1})
-    elif type(targetUnits) == unitDictionary: #target units are provided as a unit dictionary
-        targetNumber = dFloat(1, targetUnits)
-    elif type(targetUnits) == dFloat: #target units are provided as a dFloat
-        targetNumber = targetUnits
-    else: #target units are not provided as valid
-        raise errors.UnitError("Unable to convert. " + str(targetUnits) + " is not a valid unit!")
-        return False
-    
-    targetBaseNumber = reduceToBaseUnits(targetNumber) #reduce target units to base. This conveniently includes the multiplication factor
-    
-    unitEquivalency = getUnitEquivalency(sourceBaseNumber, targetBaseNumber) #1 if equivalent, -1 if reciprocals, or 0 if not equivalent
-    
-    conversionFactor = float(targetBaseNumber)**unitEquivalency
-    convertedNumber = dFloat((float(sourceBaseNumber)/conversionFactor)**unitEquivalency, targetNumber.units)
-    
-    if (unitEquivalency == 1) or (not strict and unitEquivalency == -1):
-        return convertedNumber
-    else:
-        raise errors.UnitError("Unable to convert from "+ str(sourceNumber.units) + " to " + str(targetNumber.units) + ". Dimensionality mismatch.")        
-    
-def applyDefaultUnits(value, defaultUnits):
-    """Applies default units to a value if not already a dFloat.
-    
-    value -- the value to be checked. If a dFloat object is provided, no change will be performed
-    defaultUnits -- the unit type to be applied
-    
-    Returns a dFloat, either as provided, or with default units.
-    """
-    if type(value) == dFloat:
-        return value #already a dFloat, no need to convert
-    else:
-        return defaultUnits*value #multiplying is the safest way to do this, because it works with compound units (e.g. px/inch)
-
 
 #-- STANDARD UNITS --
 
