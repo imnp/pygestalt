@@ -205,7 +205,8 @@ class unit(object):
         else:
             new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
 
-        return new_unit
+        return new_unit       
+    
 
     def _getUnitDictAndValue(self, arg):
         """Returns the unit dictionary and value for the provided argument.
@@ -339,7 +340,10 @@ class unitdict(dict):
         """If the dictionary consists of only one unit raised to the 1st power, this unit is returned, otherwise False."""
         if len(self) == 1:
             for key in self:
-                return key
+                if self[key] == 1:
+                    return key
+                else:
+                    return False
         else:
             return False
 
@@ -366,6 +370,7 @@ class unitdict(dict):
         that_unitdict.removeDimensionlessUnits()
 
         return dict.__eq__(this_unitdict, that_unitdict)
+    
 
     def isEquivalent(self, other):
         """Returns the equivalency of this unitdict to another unitdict.
@@ -462,8 +467,8 @@ class dFloat(float):
         if type(other) != dFloat:
             raise errors.UnitError("cannot add dFloats to non-dFloats")
 
-        if self.units != other.units: #REPLACE with conversion convenience, when ready.
-            raise errors.UnitError("addition operand units don't match")
+        if self.units.primary_unitdict != other.units.primary_unitdict: #REPLACE with conversion convenience, when ready.
+            raise errors.UnitError("addition operand units don't match " + str(self.units) + " vs " + str(other.units))
 
         value = float(self) + float(other) #perform numerical addition
 
@@ -478,8 +483,8 @@ class dFloat(float):
         if type(other) != dFloat:
             raise errors.UnitError("cannot subtract dFloats to non-dFloats")
 
-        if self.units != other.units: #REPLACE with conversion convenience, when ready.
-            raise errors.UnitError("subtraction operand units don't match")
+        if self.units.primary_unitdict != other.units.primary_unitdict: #REPLACE with conversion convenience, when ready.
+            raise errors.UnitError("subtraction operand units don't match: " + str(self.units) + " vs " + str(other.units))
 
         value = float(self) - float(other) #perform numerical subtraction
 
@@ -588,6 +593,8 @@ lbf = unit('lbf', 'pound force', ozf, 1.0/16.0)
 # electrical
 V = unit('V', 'volt')
 A = unit('A', 'amp')
+
+
 # pseudo-units
 # these units are just to make it easier to keep track of transformations thru the system, and are not necessarily SI units
 step = unit('step', 'step') #steps are base units

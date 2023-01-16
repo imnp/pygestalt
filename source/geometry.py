@@ -523,7 +523,7 @@ class vector(object):
         If startPoint and endPoint are supplied, the result will be based on that. Otherwise, it simply returns
         the stored slope and intercept of the vector object.
         """
-
+        
         if startPoint: #actually calculate the slope and intercept.
             slope = (endPoint[1]-startPoint[1])/(endPoint[0]-startPoint[0])
             intercept = startPoint[1] - slope*startPoint[0]

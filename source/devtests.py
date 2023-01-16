@@ -10,7 +10,7 @@ from pygestalt import units
 from pygestalt import geometry
 from pygestalt import mechanics
 from pygestalt import plotting
-
+from pygestalt import simulation
 
 import copy
 import time
@@ -189,89 +189,90 @@ import time
 
 # ---- TESTING REVISED UNIT DICTIONARY
 
-print("Check Unit String")
-print(units.m)
+# print("Check Unit String")
+# print(units.m)
 
-print("Check Unit Representation")
-print(repr(units.m))
+# print("Check Unit Representation")
+# print(repr(units.m))
 
-print("Unit Multiplication")
-work = units.m * units.N
+# print("Unit Multiplication")
+# work = units.m * units.N
 
-print(work)
-print(repr(work))
+# print(work)
+# print(repr(work))
 
-print("Unit Division")
-velocity = units.m/units.s
+# print("Unit Division")
+# velocity = units.m/units.s
 
-distance = velocity * units.s
+# distance = velocity * units.s
 
-print(velocity)
-print(repr(velocity))
+# print(velocity)
+# print(repr(velocity))
 
-print("Check unitary units: m/s * s")
-print(repr(distance))
+# print("Check unitary units: m/s * s")
+# print(repr(distance))
 
-print("Check dFloat generation")
-print(1.5*velocity)
-print(velocity*1.5)
-print(1.5/velocity)
-print(velocity/1.5)
+# print("Check dFloat generation")
+# print(1.5*velocity)
+# print(velocity*1.5)
+# print(1.5/velocity)
+# print(velocity/1.5)
 
-bikeSpeed = velocity(5.8)
-print(bikeSpeed)
-print(bikeSpeed*units.s(2))
-print(bikeSpeed/units.s(2))
+# bikeSpeed = velocity(5.8)
+# print(bikeSpeed)
+# print(bikeSpeed*units.s(2))
+# print(bikeSpeed/units.s(2))
 
-# Test unit conversion
-inch_velocity = units.inch / units.min
-metric_velocity = units.m / units.s
+# # Test unit conversion
+# inch_velocity = units.inch / units.min
+# metric_velocity = units.m / units.s
 
-print(repr(inch_velocity))
-print(repr(metric_velocity))
+# print(repr(inch_velocity))
+# print(repr(metric_velocity))
 
-print(metric_velocity.getBaseUnitDictionary())
-print(inch_velocity.getBaseUnitDictionary())
+# print(metric_velocity.getBaseUnitDictionary())
+# print(inch_velocity.getBaseUnitDictionary())
 
-watts = units.unit("W", "Watts", units.N*units.m/units.s, 1)
-print(repr(watts))
+# watts = units.unit("W", "Watts", units.N*units.m/units.s, 1)
+# print(repr(watts))
 
-joules = watts * units.s
+# joules = watts * units.s
 
-print(joules)
+# print(joules)
 
-print(joules.getBaseUnitDictionary())
+# print(joules.getBaseUnitDictionary())
 
-power_english = units.unit("PE", "Power English", units.lbf * units.ft / units.s, 1)
-print(repr(power_english))
+# power_english = units.unit("PE", "Power English", units.lbf * units.ft / units.s, 1)
+# print(repr(power_english))
 
-energy_english = power_english*units.s
-print(energy_english.getBaseUnitDictionary())
+# energy_english = power_english*units.s
+# print(energy_english.getBaseUnitDictionary())
 
-# Test unitdict equivilency functions
-velocity1 = units.m/units.s
-velocity2 = units.deg*units.inch/units.min
+# # Test unitdict equivilency functions
+# velocity1 = units.m/units.s
+# velocity2 = units.deg*units.inch/units.min
 
-vel1_unitdict, conversion = velocity1.getBaseUnitDictionary()
-vel2_unitdict, conversion = velocity2.getBaseUnitDictionary()
+# vel1_unitdict, conversion = velocity1.getBaseUnitDictionary()
+# vel2_unitdict, conversion = velocity2.getBaseUnitDictionary()
 
-print("vel1:" + str(vel1_unitdict))
-print("vel2:" + str(vel2_unitdict))
+# print("vel1:" + str(vel1_unitdict))
+# print("vel2:" + str(vel2_unitdict))
 
-print(vel1_unitdict == vel2_unitdict)
+# print(vel1_unitdict == vel2_unitdict)
 
-# Test Conversion
+# # Test Conversion
 
-distance_m = units.m(2)
+# distance_m = units.m(2)
 
-print(units.inch(distance_m))
+# print(units.inch(distance_m))
 
 
-print(units.rad(units.deg(360)))
+# print(units.rad(units.deg(360)))
 
-print((units.m/units.s)((units.ft/units.min)(5)))
+# print((units.m/units.s)((units.ft/units.min)(5)))
 # print(units.g.isCompoundUnit())
 
+# print(repr(units.rad/units.s))
 
 
 # ---MECHANICS---
@@ -466,6 +467,6 @@ print((units.m/units.s)((units.ft/units.min)(5)))
 # x = plotting.dataset([(1,1),(3,3),(5,7)], (units.s, units.m))
 # x.plot()
 
-# print(x(units.s(6)))
-
+##------ SIMULATION ------
+# simulation.clearpath_CPM_SDSK_3411P_RLN.power_curve().plot()
 
