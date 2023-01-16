@@ -187,6 +187,70 @@ import time
 # 
 # print mySpeed.convert(units.m/units.min**2)
 
+# ---- TESTING REVISED UNIT DICTIONARY
+
+print("Check Unit String")
+print(units.m)
+
+print("Check Unit Representation")
+print(repr(units.m))
+
+print("Unit Multiplication")
+work = units.m * units.N
+
+print(work)
+print(repr(work))
+
+print("Unit Division")
+velocity = units.m/units.s
+
+distance = velocity * units.s
+
+print(velocity)
+print(repr(velocity))
+
+print("Check unitary units: m/s * s")
+print(repr(distance))
+
+print("Check dFloat generation")
+print(1.5*velocity)
+print(velocity*1.5)
+print(1.5/velocity)
+print(velocity/1.5)
+
+bikeSpeed = velocity(5.8)
+print(bikeSpeed)
+print(bikeSpeed*units.s(2))
+print(bikeSpeed/units.s(2))
+
+# Test unit conversion
+inch_velocity = units.inch / units.min
+metric_velocity = units.m / units.s
+
+print(repr(inch_velocity))
+print(repr(metric_velocity))
+
+print(metric_velocity.getBaseUnitDictionary())
+print(inch_velocity.getBaseUnitDictionary())
+
+watts = units.unit("W", "Watts", units.N*units.m/units.s, 1)
+print(repr(watts))
+
+joules = watts * units.s
+
+print(joules)
+
+print(joules.getBaseUnitDictionary())
+
+power_english = units.unit("PE", "Power English", units.lbf * units.ft / units.s, 1)
+print(repr(power_english))
+
+energy_english = power_english*units.s
+print(energy_english.getBaseUnitDictionary())
+# print(units.g.isCompoundUnit())
+
+
+
 # ---MECHANICS---
 # myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
 # print myArray[0,1]
@@ -373,9 +437,12 @@ import time
 # test3 = tester()
 # print(core.distributedFunctionCall('owner', [test1, test2, test3], 'test', core.syncToken, 'arg1', 'arg2', 1, arg4 = "arg4", arg5 = ("arg51", "arg52", "arg53")))
 
+
 ##------ PLOTTING -------
 
-x = plotting.dataset([(1,1),(3,3),(5,7)], (units.s, units.m))
-x.plot()
+# x = plotting.dataset([(1,1),(3,3),(5,7)], (units.s, units.m))
+# x.plot()
 
-print(x(units.s(6)))
+# print(x(units.s(6)))
+
+

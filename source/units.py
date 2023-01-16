@@ -1,10 +1,18 @@
 # pyGestalt Units Library
 
-"""A set of common measurement units typically associated with numbers.
+""" pyGestalt Units Library
 
-NOTE: The user should avoid doing substantial math using the dimensional dFloat type defined here.
-It is inefficient and is largely intended to keep things straight and avoid unit mistakes when
-defining machine kinematics or performing analysis.
+Updated January 15th, 2023
+
+This library provides the functionality needed to assign, track, and convert units.
+
+The two basic types are unit and dFloat.
+    -- unit is used to represent the dimensionality of a number. Units can be combined into new units via multiplication, division, and raising to a power.
+    -- dFloat is a dimensional floating point number, and is based off of the float class.
+
+It is our hope that by investing effort into this library, other important functionality -- such as simulating the performance of machines -- will become
+more straightforward and flexible, and less error-prone.
+
 """
 
 from pygestalt import errors, utilities
@@ -13,183 +21,323 @@ import copy
 
 class unit(object):
     """The base class for all measurement units."""
-    def __init__(self, abbreviation, fullName, baseUnit = None, conversion = None):
+
+    def __init__(self, abbreviation, fullName, baseUnit = None, conversion = None, compound_unitdict = None):
         """Generates a new unit type.
-        
-        abbreviation -- a shorthand abbreviation for the unit, which will show up when printed. E.g. 'mm'.
-        fullName -- a full name for the unit, e.g. 'millimeters'.
-        baseUnit -- A unit type from which this unit a scalar multiple. For example, if this unit was millimeters, the base unit might be meters.
-        conversion -- The conversion factor to get from the base unit to this unit. thisUnit = conversion*baseUnit.
-            -- If conversion is None, this will be treated as a base unit.
-            -- If conversion is 0, this will be treated as a non-dimensional unit.
+
+        The most basic form of initialization for a unit is simply:
+            abbreviation -- a shorthand abbreviation for the unit, which will show up when printed. E.g. 'mm'.
+            fullName -- a full name for the unit, e.g. 'millimeters'.
+        Both of these are mandatory, but in the case of compound units (e.g. mm/s), they may be auto-generated.
+
+
+        If the unit is a "derived unit," meaning it is based on other units, then the following should be provided:
+            baseunit -- A unit type from which this unit a scalar multiple. For example, if this unit was millimeters, the base unit might be meters.
+            conversion  -- The conversion factor to get from the base unit to this unit. thisUnit = conversion*baseUnit.
+                        -- If conversion is 0, this will be treated as a non-dimensional unit.
+
+        If the unit is a "compound unit," for example mm/s, then the following should be provided:
+            compound_unitdict -- the combination of units from which this unit is derived, of type unitdict. E.g. if this unit represents velocity, 
+                                compound_unitdict might be {units.m:1, units.s:-1}. Typically this unitdict is not provided by the user, but rather by 
+                                operations performed on the units.
+
+        NOTE: At least for now, units can be derived or compound, but never both.
         """
+
         self.abbreviation = abbreviation
         self.fullName = fullName
         self.baseUnit = baseUnit
         self.conversion = conversion
-    
-    def __call__(self, value = 1.0):
-        """Generates a new dFloat with the units of this unit object.
-        
-        value -- a floating point value for the dimensional number.
-        """
-        if type(value) == dFloat:
-            return dFloat.convert(value, self)
-        else:
-            return dFloat(value, {self:1})
-    
-    def __mul__(self, value):
-        """Left multiply for units.
-        
-        Gets called when a number or unit is directly multiplied by a unit to create a dFloat.
-        """
-        if type(value) == unit:
-            return dFloat(1, {value:1, self:1})
-        elif type(value) == dFloat:
-            return value*self
-        else:
-            return dFloat(value, {self:1})        
-        
-        
-    def __rmul__(self, value):
-        """Right multiply for units.
-        
-        Gets called when a number or unit is directly multiplied by a unit to create a dFloat.
-        """
-        if type(value) == unit:
-            return dFloat(1, {value:1, self:1})
-        else:
-            return dFloat(value, {self:1})
-    
-    def __rtruediv__(self, value):
-        """Right divide for units.
-        
-        Gets called when a number or unit is directly divided by a unit to create a dFloat.
-        """
-        
-        if type(value) == unit:
-            return dFloat(1, {value:1, self:-1})
-        else:
-            return dFloat(value, {self:-1})
 
-    def __truediv__(self, value):
-        """Divide for units.
-        
-        Gets called when a unit is directly divided by a unit or number to create a dFloat.
-        """
-        
-        if type(value) == unit:
-            return dFloat(1, {value:-1, self:1})
-        elif type(value) == dFloat:
-            return dFloat(1, {self:1})/value
+        if baseUnit and conversion == None: #check that a conversion factor was also provided.
+            raise errors.UnitError("No conversion scaling factor was provided between " + abbreviation + " and base unit " + baseUnit.abbreviation)
+
+        if compound_unitdict:
+            self.primary_unitdict = compound_unitdict
         else:
-            return dFloat(1.0/value, {self:1})
-    
+            self.primary_unitdict = unitdict({self:1})
+
+    def __repr__(self):
+        if self.isDerivedUnit():
+            return self.fullName + " (" + self.abbreviation + ") : " + str(self.conversion) + " * " + str(self.baseUnit)
+        else:
+            return self.fullName + " (" + self.abbreviation + ") "
+
+    def __str__(self):
+        """String representation of the unit dictionary."""
+        return self.abbreviation
+
+    def isDerivedUnit(self):
+        """Returns True if this unit is based on other units."""
+        return (self.baseUnit != None)
+
+    def isCompoundUnit(self):
+        """Returns True if this unit is a compound unit (e.g. mm/s)"""
+        return self.primary_unitdict != {self:1}
+
+    def __call__(self, arg):
+        """Returns a dFloat that is in units of self.
+
+        If a non-dFloat is provided, these units will be applied.
+        If a dFloat is provided, it will attempt to convert into these units.
+        """
+        return dFloat(float(arg), self)
+
+
+    # ---- MATH FUNCTIONS ----
+    def __mul__(self, arg):
+        """Returns a new unit equivalent to this unit multiplied by the input."""
+        
+        new_unitdict = copy.copy(self.primary_unitdict)
+
+        arg_unitdict, arg_value = self._getUnitDictAndValue(arg)
+
+        unit_tuples = arg_unitdict.asUnitPowerTuples()
+
+        for thisUnit, thisPower in unit_tuples:
+            new_unitdict.add(thisUnit, thisPower)
+
+        existing_unit = new_unitdict.isUnitary() #will return an existing unit if the dictionary only has one element to the first power, otherwise False
+
+        if existing_unit:
+            new_unit = existing_unit
+        else:
+            new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
+
+        if type(arg) == unit:
+            return new_unit
+        else:
+            return dFloat(arg_value, new_unit)
+
+    def __rmul__(self, arg):
+        """Returns a new unit equivalent to the input multiplied by this unit."""
+        
+        new_unitdict = copy.copy(self.primary_unitdict)
+
+        arg_unitdict, arg_value = self._getUnitDictAndValue(arg)
+
+        unit_tuples = arg_unitdict.asUnitPowerTuples()
+
+        for thisUnit, thisPower in unit_tuples:
+            new_unitdict.add(thisUnit, thisPower)
+
+        existing_unit = new_unitdict.isUnitary() #will return an existing unit if the dictionary only has one element to the first power, otherwise False
+
+        if existing_unit:
+            new_unit = existing_unit
+        else:
+            new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
+
+        if type(arg) == unit:
+            return new_unit
+        else:
+            return dFloat(arg_value, new_unit)
+
+    def __truediv__(self, arg):
+        """Returns a new unit equivalent to this unit divided by the input."""
+        
+        new_unitdict = copy.copy(self.primary_unitdict)
+
+        arg_unitdict, arg_value = self._getUnitDictAndValue(arg)
+
+        unit_tuples = arg_unitdict.asUnitPowerTuples()
+
+        for thisUnit, thisPower in unit_tuples:
+            new_unitdict.add(thisUnit, -thisPower)
+
+        existing_unit = new_unitdict.isUnitary() #will return an existing unit if the dictionary only has one element to the first power, otherwise False
+
+        if existing_unit:
+            new_unit = existing_unit
+        else:
+            new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
+
+        if type(arg) == unit:
+            return new_unit
+        else:
+            return dFloat(1/arg_value, new_unit)
+
+    def __rtruediv__(self, arg):
+        """Returns a new unit equivalent to the input divided by this unit."""
+        
+        new_unitdict = copy.copy(self.primary_unitdict)
+        new_unitdict.invert()
+
+        arg_unitdict, arg_value = self._getUnitDictAndValue(arg)
+
+        unit_tuples = arg_unitdict.asUnitPowerTuples()
+
+        for thisUnit, thisPower in unit_tuples:
+            new_unitdict.add(thisUnit, thisPower)
+
+        existing_unit = new_unitdict.isUnitary() #will return an existing unit if the dictionary only has one element to the first power, otherwise False
+
+        if existing_unit:
+            new_unit = existing_unit
+        else:
+            new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
+
+        if type(arg) == unit:
+            return new_unit
+        else:
+            return dFloat(arg_value, new_unit)
+
     def __pow__(self, power):
-        """Power for units.
+        """Returns a new unit equivalent to this unit multiplied by the input."""
         
-        Gets called when a unit is brought to a power, to create a dFloat."""
-        return dFloat(1, {self:power})
+        new_unitdict = unitdict()
+
+        unit_tuples = self.primary_unitdict.asUnitPowerTuples()
+
+        for thisUnit, thisPower in unit_tuples:
+            new_unitdict.add(thisUnit, thisPower*power)
+
+        existing_unit = new_unitdict.isUnitary() #will return an existing unit if the dictionary only has one element to the first power, otherwise False
+
+        if existing_unit:
+            new_unit = existing_unit
+        else:
+            new_unit = unit(abbreviation = str(new_unitdict), fullName = "Derived Unit: " + str(new_unitdict), compound_unitdict = new_unitdict)
+
+        return new_unit
+
+    def _getUnitDictAndValue(self, arg):
+        """Returns the unit dictionary and value for the provided argument.
+
+        arg -- a number, dFloat, or unit
+
+        returns unitdict, value
+        """
+        if type(arg) == unit:
+            arg_unitdict = arg.primary_unitdict
+            arg_value = None
+        elif type(arg) == dFloat:
+            arg_unitdict = arg.units.primary_unitdict
+            arg_value = float(arg)
+        else:
+            arg_unitdict = unitdict()
+            arg_value = float(arg)
+
+        return arg_unitdict, arg_value
 
 
-class unitDictionary(dict):
-    """A dictionary subclass used to store units and their powers."""
+    def getBaseUnitDictionary(self):
+        """Determines the base units and scaling factor of this unit.
+        
+        Note that this function runs recursively until a base unit has been found
+        
+        Returns output_unitdict, output_conversion, where:
+            output_unitdict-- the base units of self
+            output_conversion -- the scaling factor to go from the base units to self. derivedUnit = conversion*baseUnit
+        """
+
+        output_unitdict = unitdict()
+        output_conversion = 1.0
+
+        if self.isCompoundUnit(): #compound unit
+            for thisUnit, thisPower in self.primary_unitdict.asUnitPowerTuples():
+                base_unitdict, base_conversion = thisUnit.getBaseUnitDictionary()
+
+                for baseUnit, basePower in base_unitdict.asUnitPowerTuples():
+                    output_unitdict.add(baseUnit, basePower * thisPower)
+                output_conversion *= (base_conversion**thisPower)
+
+        elif self.isDerivedUnit():
+            base_unitdict, base_conversion = self.baseUnit.getBaseUnitDictionary()
+
+            for baseUnit, basePower in base_unitdict.asUnitPowerTuples():
+                output_unitdict.add(baseUnit, basePower)
+
+            output_conversion = self.conversion * base_conversion
+
+        else:
+            output_unitdict.add(self, 1.0)
+            output_conversion = 1.0
+
+        return output_unitdict, output_conversion
+
+
+
+
+class unitdict(dict):
+    """A dictionary subclass used to store units and their powers.
+
+    This is the core of the unit system. Units are stored in the form {unit: power, ...}
+    """
+
     def __init__(self, inputDictionary = {}):
         """Initialization function for unit dictionary.
         
         inputDictionary -- a seed dictionary in the form {unitObject:unitPower,...}
-        """
+        """       
         dict.__init__(self, inputDictionary)
+
     
-    def __mul__(self, inputUnitDict):
-        """Overrides multiplication to mix units into the dictionary.
-        
-        inputUnitDict -- a set of units either of unitDictionary type or in the same format: {unitObject:unitPower,...}
+    def add(self, newUnit, power):
+        """Adds a unit to the unitdict.
+
+        newUnit -- a unit object to be added
+        power -- the power to which this unit object is to be added.
         """
-        outputUnitDict = copy.copy(self) #work on a copy of self
-        
-        if type(inputUnitDict) == unitDictionary or type(inputUnitDict) == dict: #make sure that input is compatible
-            for thisUnit in inputUnitDict: #iterate over keys in the input dictionary
-                if thisUnit in outputUnitDict: #unit already exists in self
-                    outputUnitDict.update({thisUnit: outputUnitDict[thisUnit] + inputUnitDict[thisUnit]}) #add powers to units
-                    if outputUnitDict[thisUnit] == 0: outputUnitDict.pop(thisUnit) #if resulting power is 0, remove unit
-                else:
-                    outputUnitDict.update({thisUnit: inputUnitDict[thisUnit]}) #add new unit to dictionary
+
+        if newUnit in self: #The unit is already in the dictionary
+            newPower = self[newUnit] + power
+            if newPower == 0:
+                self.pop(newUnit)
+            else:
+                self.update({newUnit:newPower})
+
+        else: #unit is not in the dictionary yet
+            self.update({newUnit: power})
+
+    def invert(self):
+        """Inverts the unit dictionary."""
+        for unit in self:
+            power = self[unit]
+            self.update({unit: -power})
+
+    def isUnitary(self):
+        """If the dictionary consists of only one unit raised to the 1st power, this unit is returned, otherwise False."""
+        if len(self) == 1:
+            for key in self:
+                return key
         else:
-            raise errors.UnitError("Cannot make new unit dictionary using provided input")
-        
-        return outputUnitDict
-    
-    def __truediv__(self, inputUnitDict):
-        """Overrides division to mix units into the dictionary.
-        
-        inputUnitDict -- a set of units of unitDictionary type or in the same format {unitObject:unitPower,...}
-        """
-        outputUnitDict = copy.copy(self) #work on a copy of self
-        
-        if type(inputUnitDict) == unitDictionary or type(inputUnitDict) == dict: #make sure that input is compatible
-            for thisUnit in inputUnitDict: #iterate over keys in the input dictionary
-                if thisUnit in outputUnitDict: #unit already exists in self
-                    outputUnitDict.update({thisUnit: outputUnitDict[thisUnit] - inputUnitDict[thisUnit]}) #add powers to units
-                    if outputUnitDict[thisUnit] == 0: outputUnitDict.pop(thisUnit) #if resulting power is 0, remove unit
-                else:
-                    outputUnitDict.update({thisUnit: -inputUnitDict[thisUnit]}) #add new unit to dictionary
-        
-        return outputUnitDict  
-    
-    def __rtruediv__(self, other):
-        """Overrides right-hand division. This is only used to invert units.
-        other -- whatever the left-hand multiplier is. Doesn't matter as it doesn't get used.
-        """
-        outputUnitDict = copy.copy(self) #work on a copy of self
-        
-        for thisUnit in outputUnitDict: #iterate over keys in the output dictionary
-            outputUnitDict.update({thisUnit:-outputUnitDict[thisUnit]})
-        
-        return outputUnitDict
-    
-    def __pow__(self, power):
-        """Overrides power operator.
-        
-        power -- the power to which to raise the units."""
-        
-        outputUnitDict = copy.copy(self) #work on a copy of self
-        
-        for thisUnit in outputUnitDict: #iterate over keys in the output dictionary
-            outputUnitDict.update({thisUnit: power * outputUnitDict[thisUnit]})
-            
-        return outputUnitDict
-               
+            return False
+
+    def asUnitPowerTuples(self):
+        """Returns the unitdict as a list of (unit, power) tuples."""
+        return [(thisUnit, self[thisUnit]) for thisUnit in self]
 
     def __str__(self):
         """String representation of the unit dictionary."""
-        numeratorUnitList = [unitPower for unitPower in self if self[unitPower] > 0]
-        denominatorUnitList = [unitPower for unitPower in self if self[unitPower] < 0]
+        numeratorUnits = [(numeratorUnit, self[numeratorUnit]) for numeratorUnit in self if self[numeratorUnit] > 0]
+        denominatorUnits = [(denominatorUnit, self[denominatorUnit]) for denominatorUnit in self if self[denominatorUnit] < 0]
          
         returnString = '' #this is the seed of the return string that will be built upon
-         
+
         #fill in numerator string if no units are in the numerator
-        if numeratorUnitList == [] and denominatorUnitList != []:
+        if numeratorUnits == [] and denominatorUnits != []:
             returnString += "1"
          
         #fill in numerator string
-        for numeratorUnit in numeratorUnitList: #iterate over all units in numerator
-            if self[numeratorUnit] > 1: #more than to the first power
-                returnString += numeratorUnit.abbreviation + '^' + str(self[numeratorUnit]) + '*'
+        for numeratorUnit, numeratorValue in numeratorUnits: #iterate over all units in numerator
+            if numeratorValue > 1: #more than to the first power
+                returnString += numeratorUnit.abbreviation + '^' + str(numeratorValue) + '*'
             else:
                 returnString += numeratorUnit.abbreviation + '*'
+
+
+        if numeratorUnits != []: returnString = returnString[:-1] #remove trailing *
          
-        if numeratorUnitList != []: returnString = returnString[:-1] #remove trailing *
+        if denominatorUnits != []: returnString += '/' #add trailing /
          
-        if denominatorUnitList != []: returnString += '/' #add trailing /
-         
-        for denominatorUnit in denominatorUnitList: #iterate over all units in denominator
-            if self[denominatorUnit] < -1: #more than to the first power
-                returnString += denominatorUnit.abbreviation + '^' + str(-self[denominatorUnit]) + '*'
+        for denominatorUnit, denominatorValue in denominatorUnits: #iterate over all units in denominator
+            if denominatorValue < -1: #more than to the first power
+                returnString += denominatorUnit.abbreviation + '^' + str(-denominatorValue) + '*'
             else:
                 returnString += denominatorUnit.abbreviation + '*'
          
-        if denominatorUnitList != []: returnString = returnString[:-1] #remove trailing *
+        if denominatorUnits != []: returnString = returnString[:-1] #remove trailing *
          
         return returnString
 
@@ -197,90 +345,62 @@ class unitDictionary(dict):
 class dFloat(float):
     """A dimensional floating-point number, i.e. a float with units."""
     
-    def __new__(self, value, units = {}):
+    def __new__(self, value, units = None):
         """Constructor for dFloat that overrides float.__new__
         
         value -- the value of the floating point number.
-        units -- a unitDictionary specifying the units for the new dFloat
+        units -- a unit object
         """
         return float.__new__(self, value)
     
-    def __init__(self, value, units = {}):
+    def __init__(self, value, units = None):
         """Initializes the dFloat.
         
-        units -- a dictionary containing key pairs of {unitObject: power} for all units
+        units -- a unit object
         """
         
-        self.units = unitDictionary(units)
-    
-    def __call__(self, value):
-        """A shortcut for creating a new dFloat with the same units as the called dFloat."""
-        return dFloat(value, self.units)
-
+        if units == None:
+            raise errors.UnitError("dFloat must be initialized with units.")
+        else:
+            self.units = units
     
     def __str__(self):
         """String representation of the dFloat number"""
         
         return str(float(self)) + ' ' + str(self.units)
     
-    def baseUnits(self):
-        return reduceToBaseUnits(self)
-    
-    def convert(self, targetUnits):
-        return convertToUnits(self, targetUnits)
-    
+
     #--- OVERRIDE MATH FUNCTIONS ---
     def __add__(self, other):
         """Overrides addition.
         
         other -- the right-hand number to add
-        
-        A unit check will be performed if right-hand operand is of type dFloat. Otherwise the units
-        of this dFloat will be passed along into the result.
         """
+        if type(other) != dFloat:
+            raise errors.UnitError("cannot add dFloats to non-dFloats")
+
+        if self.units != other.units: #REPLACE with conversion convenience, when ready.
+            raise errors.UnitError("addition operand units don't match")
+
         value = float(self) + float(other) #perform numerical addition
-        units = unitDictionary(self.units) #make a copy of unit dictionary
-        if type(other) == dFloat:
-            if self.units != other.units: #check to make sure units match
-                raise errors.UnitError("addition operand units don't match")
-        return dFloat(value, units)
-    
-    def __radd__(self, other):
-        """Overrides right-handed addition.
-        
-        other -- the left-hand number to add.
-        
-        The units of this dFloat will be passed along into the result.
-        """
-        value = float(self) + float(other)
-        units = unitDictionary(self.units)
-        return dFloat(value, units)
+
+        return dFloat(value, self.units)
     
     def __sub__(self, other):
         """Overrides subtraction.
         
         other -- the right-hand number to subract.
+        """
 
-        A unit check will be performed if right-hand operand is of type dFloat. Otherwise the units
-        of this dFloat will be passed along into the result.
-        """
-        value = float(self) - float(other) #perform numerical addition
-        units = unitDictionary(self.units) #make a copy of unit dictionary
-        if type(other) == dFloat:
-            if self.units != other.units: #check to make sure units match
-                raise errors.UnitError("addition operand units don't match")
-        return dFloat(value, units)        
-    
-    def __rsub__(self, other):
-        """Overrides right-handed subtraction.
-        
-        other -- the left-hand number to subtract.
-        
-        The units of this dFloat will be passed along into the result.
-        """
-        value = float(other) - float(self)
-        units = unitDictionary(self.units)
-        return dFloat(value, units)
+        if type(other) != dFloat:
+            raise errors.UnitError("cannot subtract dFloats to non-dFloats")
+
+        if self.units != other.units: #REPLACE with conversion convenience, when ready.
+            raise errors.UnitError("subtraction operand units don't match")
+
+        value = float(self) - float(other) #perform numerical subtraction
+
+        return dFloat(value, self.units)
     
     def __neg__(self):
         """Overrides negation."""
@@ -290,57 +410,45 @@ class dFloat(float):
     
     def __abs__(self):
         """Overrides absolute value."""
-        value = abs(float(self))
-        units = unitDictionary(self.units)
-        return dFloat(value, units)
+        return dFloat(abs(float(self)), self.units)
         
         
     def __mul__(self, other):
-        """Overrides left-hand multiplication.
-        
-        other -- right-hand number to be multiplied.
-        """
-        if type(other) != unit: #not multiplying by a generic unit
-            value = float(self) * float(other) #perform numerical multiplication
-            if type(other) == dFloat: #mix in units of other operand units
-                newUnits = self.units*other.units
-            else:
-                newUnits = self.units
-            return dFloat(value, newUnits)
+        """Overrides left-hand multiplication."""
+        if type(other) == unit:
+            return dFloat(float(self), self.units * other)
+
+        elif type(other) == dFloat:
+            return dFloat(float(self)*float(other), self.units * other.units)
+
         else:
-            newUnits = self.units * {other:1}
-            return dFloat(float(self), newUnits)
+            return dFloat(float(self)*float(other), self.units)
+
+
     
     def __rmul__(self, other):
         """Overrides right-hand multiplication.
         
         other -- left-hand number to be multiplied.
         
-        Note that this will only be called if the left-hand number is not a dFloat.
+        Note that this will only be called if the left-hand number is not a dFloat or unit.
         """
-        if type(other) != unit: #not multiplying by a generic unit
-            value = float(other) * float(self)
-            return dFloat(value, self.units)
-        else:
-            newUnits = {other:1} * self.units
-            return dFloat(value, newUnits)
+        return dFloat(float(self)*float(other), self.units)
     
+
     def __truediv__(self, other):
-        """Overrides left-hand division.
-        
-        other -- the right-hand number to be divided by.
-        """
-        if type(other) != unit: #not dividing by a generic unit
-            value = float(self)/ float(other) #perform numerical division
-            if type(other) == dFloat: #mix in inverse of right-hand operand units
-                newUnits = self.units / other.units
-            else:
-                newUnits = self.units
-            return dFloat(value, newUnits)
+        """Overrides left-hand division."""
+
+        if type(other) == unit:
+            return dFloat(float(self), self.units / other)
+
+        elif type(other) == dFloat:
+            return dFloat(float(self)/float(other), self.units / other.units)
+
         else:
-            newUnits = self.units / {other:1}
-            return dFloat(float(self), newUnits)
+            return dFloat(float(self)/float(other), self.units)
     
+
     def __rtruediv__(self, other):
         """Overrides right-hand division.
         
@@ -348,36 +456,22 @@ class dFloat(float):
         
         Note that this will only be called if the left-hand number is not a dFloat.
         """
-        if type(other) != unit: #not dividing by a generic unit
-            value = float(other) / float(self)
-            return dFloat(value, 1/self.units)   #inverted unit powers
-        else:
-            newUnits = (1 / self.units) * {other:1}
+
+        return dFloat(float(other)/float(self), 1/self.units)
     
-    def __pow__(self, other):
+
+    def __pow__(self, power):
         """Overrides exponential.
         
-        other -- the power to raise this value to.
+        power -- the power to raise this value to.
         """
-        value = float(self)**float(other)
+        value = float(self)**float(power)
         newUnits = self.units ** other
         return dFloat(value, newUnits)
 
+
+
 #-- CONVERSION FUNCTIONS --
-def getBaseUnits(derivedUnits):
-    """Determines the base unit and scaling factor of a provided unit.
-    
-    Note that this function runs recursively until a base unit has been found
-    
-    Returns baseUnit, conversion, where:
-        baseUnit -- the base unit of the provided derived units
-        conversion -- the scaling factor to go from the base units to the provided derived units. derivedUnit = conversion*baseUnit
-    """
-    if type(derivedUnits.baseUnit) == unit: #it's a derived unit!
-        baseUnit, conversion = getBaseUnits(derivedUnits.baseUnit)
-        return baseUnit, derivedUnits.conversion*conversion
-    else:
-        return derivedUnits, 1.0
 
 def reduceToBaseUnits(sourceNumber):
     """Reduces a dFloat into an equivalent in base units.
@@ -557,14 +651,6 @@ def applyDefaultUnits(value, defaultUnits):
     else:
         return defaultUnits*value #multiplying is the safest way to do this, because it works with compound units (e.g. px/inch)
 
-def getAbbreviation(value):
-    """Returns the abbreviation string for an input unit or dFloat."""
-    if type(value) == unit:
-        return value.abbreviation
-    elif type(value) == dFloat:
-        return str(value.units)
-    else:
-        return None
 
 #-- STANDARD UNITS --
 
@@ -588,7 +674,7 @@ hr = unit('hr', 'hour', s, 1.0/3600.0)
 
 # mass
 kg = unit('kg', 'kilogram') #kilograms are base unit of mass
-g = unit('g', 'gram', kg, 1000.0)
+g = unit('g', 'gram', kg, 1.0/1000.0)
 oz = unit('oz', 'ounce', g, 0.035274)
 lb = unit('lb', 'pound', oz, 1.0/16.0)
 
