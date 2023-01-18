@@ -49,6 +49,10 @@ class dataset(list):
         """Returns the interpolated value of the dataset at the provided input value."""
         return self.interpolate(independentValue)
 
+    def add(self, datapoint):
+        """Adds a single datapoint to the dataset."""
+        self += [self.convert_to_native_units(datapoint)]
+
     def plot(self):
         x, y = tuple(zip(*self))
 
@@ -56,8 +60,8 @@ class dataset(list):
 
         axes.plot(x, y)
         if self.units != ():
-            plt.ylabel(units.getAbbreviation(self.units[1]))
-            plt.xlabel(units.getAbbreviation(self.units[0]))
+            plt.ylabel(str(self.units[1]))
+            plt.xlabel(str(self.units[0]))
 
         plt.show()
 
@@ -65,17 +69,18 @@ class dataset(list):
         """Returns the interpolated value of the dataset at the provided input value."""
 
         greaterValueIndex = self._findIndexOfFirstGreaterValue_(independentValue, 0)
+        dependentUnits = self.units[1]
 
         if greaterValueIndex == 0: #provided value is less than smallest datapoint
             segmentVector = geometry.vector(self[0], self[1])
-            return segmentVector(independentValue) #extrapolate using the first two datapoints
+            return dependentUnits(segmentVector(independentValue)) #extrapolate using the first two datapoints
 
         elif greaterValueIndex == -1: #provided value is greater than the largest datapoint
             segmentVector = geometry.vector(self[-2], self[-1])
-            return segmentVector(independentValue)
+            return dependentUnits(segmentVector(independentValue))
         else:
             segmentVector = geometry.vector(self[greaterValueIndex-1], self[greaterValueIndex])
-            return segmentVector(independentValue)
+            return dependentUnits(segmentVector(independentValue))
 
 
     def _findIndexOfFirstGreaterValue_(self, value, subindex):
@@ -107,7 +112,7 @@ class dataset(list):
     def convert_to_native_units(self, datapoint):
         if self.units != ():
             variable_unit_tuples = zip(datapoint, self.units)
-            return tuple([unit*variable for variable, unit in variable_unit_tuples])
+            return tuple([unit(variable) for variable, unit in variable_unit_tuples])
         else:
             return datapoint
 

@@ -274,6 +274,11 @@ import time
 
 # print(repr(units.rad/units.s))
 
+# x = units.oz*units.inch**2*(units.rev**2/units.rad**2)
+# print(x)
+# print(repr(x))
+
+# print(x.getBaseUnitDictionary())
 
 # ---MECHANICS---
 # myArray = geometry.array([[1,2,3],[4,5,6],[7,8,9]])
@@ -470,13 +475,35 @@ import time
 ##------ SIMULATION ------
 # simulation.clearpath_CPM_SDSK_3411P_RLN.power_curve().plot()
 
-# units.m(3)**-1
 
-aAxis = mechanics.rotaryPulley(1.0)
+
+aAxis = mechanics.rotaryPulley(0.5)
 load = simulation.load((units.oz*units.inch**2)(3.9))
-# print(aAxis.forward(units.rev(3)))
 
 testSystem = simulation.system(simulation.clearpath_CPM_SDSK_3411P_RLN, aAxis, load)
-print(testSystem.reflectedInertia())
 
-# print(1/units.rad**2)
+# print(simulation.clearpath_CPM_SDSK_3411P_RLN((units.rad/units.s)(1)))
+
+# simulation.clearpath_CPM_SDSK_3411P_RLN.torque_speed_curve.plot()
+# simulation.clearpath_CPM_SDSK_3411P_RLN.power_curve().plot()
+
+
+# sim_time, sim_data = simulation.sim_timeToTargetVelocity(testSystem, (units.rad/units.s)(100))
+
+# print(sim_time)
+# sim_data.plot()
+
+# sim_motor = simulation.clearpath_CPM_SDSK_3411P_RLN
+sim_motor = simulation.dummy_standard_DC
+# sim_motor = simulation.dummy_gas_engine
+# sim_motor.torque_speed_curve.plot()
+
+sim_data = simulation.sim_transmissionRatioSweep(sim_motor, load, mechanics.rotaryPulley, 0.5, 2, (units.rad/units.s)(50))
+
+sim_data.plot()
+# x = (units.oz*units.inch**2)(3.9)*2
+
+# y = (units.kg*units.m**2)(x)
+# print(y)
+
+# print(sim_time)
