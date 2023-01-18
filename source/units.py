@@ -347,6 +347,10 @@ class unitdict(dict):
         else:
             return False
 
+    def isEmpty(self):
+        """Returns True if this unit dictionary is empty."""
+        return dict.__eq__(self, {})
+
     def asUnitPowerTuples(self):
         """Returns the unitdict as a list of (unit, power) tuples."""
         return [(thisUnit, self[thisUnit]) for thisUnit in self]
@@ -468,7 +472,11 @@ class dFloat(float):
             raise errors.UnitError("cannot add dFloats to non-dFloats")
 
         if self.units.primary_unitdict != other.units.primary_unitdict: #REPLACE with conversion convenience, when ready.
-            raise errors.UnitError("addition operand units don't match " + str(self.units) + " vs " + str(other.units))
+            other_converted = self.units(other)
+            if other_converted is False:
+                raise errors.UnitError("addition operand units don't match " + str(self.units) + " vs " + str(other.units))
+            else:
+                other = other_converted
 
         value = float(self) + float(other) #perform numerical addition
 
@@ -484,8 +492,11 @@ class dFloat(float):
             raise errors.UnitError("cannot subtract dFloats to non-dFloats")
 
         if self.units.primary_unitdict != other.units.primary_unitdict: #REPLACE with conversion convenience, when ready.
-            raise errors.UnitError("subtraction operand units don't match: " + str(self.units) + " vs " + str(other.units))
-
+            other_converted = self.units(other)
+            if other_converted is False:
+                raise errors.UnitError("subtraction operand units don't match: " + str(self.units) + " vs " + str(other.units))
+            else:
+                other = other_converted
         value = float(self) - float(other) #perform numerical subtraction
 
         return dFloat(value, self.units)
@@ -579,12 +590,12 @@ hr = unit('hr', 'hour', s, 1.0/3600.0)
 
 # mass
 kg = unit('kg', 'kilogram') #kilograms are base unit of mass
-g = unit('g', 'gram', kg, 1.0/1000.0)
+g = unit('g', 'gram', kg, 1000.0)
 oz = unit('oz', 'ounce', g, 0.035274)
 lb = unit('lb', 'pound', oz, 1.0/16.0)
 
 # force
-N = unit('N', 'newton') #newtons are the base unit of force. Eventually need to build in a derived unit system to convert into SI base units.
+N = unit('N', 'newton', kg*m/s**2, 1) #newtons are the base unit of force. Eventually need to build in a derived unit system to convert into SI base units.
 kgf = unit('kgf', 'kilogram force', N, 1.0/9.80665)
 gf = unit('gf', 'gram force', kgf, 1000.0)
 ozf = unit('ozf', 'ounce force', gf, 0.035274)
@@ -602,3 +613,4 @@ A = unit('A', 'amp')
 # these units are just to make it easier to keep track of transformations thru the system, and are not necessarily SI units
 step = unit('step', 'step') #steps are base units
 px = unit('px', 'pixels') #pixels are base units
+n = unit('n', 'number', 0) #non-dimensional units
